@@ -1,3 +1,3 @@
-# ipynbsrv-skeleton
+# ipynbsrv-backends
 
-> Project skeleton for ipynbsrv Python packages.
+> Various ipynbsrv backend contract implementations.
