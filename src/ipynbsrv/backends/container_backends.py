@@ -1,5 +1,8 @@
-from ipynbsrv.contract.backends import *
 from docker import Client
+from ipynbsrv.contract.backends import *
+import json
+import requests
+from requests.exceptions import RequestException
 
 
 class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
@@ -7,6 +10,11 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     '''
     Docker container backend powered by docker-py bindings.
     '''
+
+    '''
+    Unique key used to identify a resource (container, image) returned by the backend.
+    '''
+    IDENTIFIER_KEY = 'Id'
 
     '''
     String to identify from a container's status field either he's paused or not.
@@ -22,6 +30,11 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     Prefix for created container snapshots.
     '''
     SNAPSHOT_PREFIX = 'snapshot_'
+
+    '''
+    Unique key used to identify a container's status.
+    '''
+    STATUS_KEY = 'Status'
 
     '''
     Initializes a new Docker container backend.
@@ -46,7 +59,21 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     '''
     def container_exists(self, container, **kwargs):
         containers = self.get_containers(only_running=False)
-        return next((ct for ct in containers if container == ct.get('Id')), False) is not False
+        return next((ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY)), False) is not False
+
+    '''
+    Checks if a container with the given name exists.
+
+    :param name: The name to check for.
+    '''
+    def container_exists_by_name(self, name):
+        containers = self.get_containers(only_running=False)
+        for container in containers:
+            for ct_name in container.get('Names'):
+                if ct_name.replace('/', 00) == name:
+                    return True
+
+        return False
 
     '''
     :inherit
@@ -56,7 +83,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         container = self.get_container(container)
-        return container.get('Status').startswith(Docker.RUNNING_IDENTIFIER)
+        return container.get(Docker.STATUS_KEY).startswith(Docker.RUNNING_IDENTIFIER)
 
     '''
     :inherit
@@ -66,7 +93,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         container = self.get_container(container)
-        return container.get('Status').endswith(Docker.PAUSED_IDENTIFIER)
+        return container.get(Docker.STATUS_KEY).endswith(Docker.PAUSED_IDENTIFIER)
 
     '''
     :inherit
@@ -76,7 +103,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         snapshots = self.get_container_snapshots(container)
-        return next((sh for sh in snapshots if snapshot == sh.get('Id')), False)
+        return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False)
 
     '''
     :inherit
@@ -85,10 +112,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     :param kwargs: Optional arguments for docker-py's create_container method.
     '''
     def create_container(self, specification, **kwargs):
-        # if self.container_exists(container):
-        #     raise ContainerBackendError("A container with that name already exists.")
-
         self.validate_container_creation_specification(specification)
+        if self.container_exists_by_name(container):
+            raise ContainerBackendError("A container with that name already exists")
+
         try:
             container = self._client.create_container(
                 name=specification.get('name'),
@@ -100,7 +127,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 # TODO: other optional params
                 detach=True
             )
-            return container.get('Id')
+            return container.get(Docker.IDENTIFIER_KEY)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -121,7 +148,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 repository=container.get('Names')[0].replace('/', ''),
                 tag=Docker.SNAPSHOT_PREFIX + specification.get('name')
             )
-            return snapshot.get('Id')
+            return snapshot.get(Docker.IDENTIFIER_KEY)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -192,7 +219,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         containers = self.get_containers(only_running=False)
-        return next(ct for ct in containers if container == ct.get('Id'))
+        return next(ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY))
 
     '''
     :inherit
@@ -224,7 +251,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerSnapshotNotFoundError
 
         snapshots = self.get_container_snapshots(container)
-        return next(sh for sh in snapshots if snapshot == sh.get('Id'))
+        return next(sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY))
 
     '''
     :inherit
@@ -240,7 +267,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 for repotag in snapshot.get('RepoTags'):
                     if repotag.startswith('%s:%s' % (container_name, Docker.SNAPSHOT_PREFIX)):
                         # add required fields as per API specification
-                        snapshot['pk'] = snapshot.get('Id')
+                        snapshot[ContainerBackend.FIELD_PK] = snapshot.get(Docker.IDENTIFIER_KEY)
 
                         snapshots.append(snapshot)
             return snapshots
@@ -255,14 +282,14 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             containers = self._client.containers(all=(not only_running))
             for container in containers:
                 # add required fields as per API specification
-                container['pk'] = container.get('Id')
+                container[ContainerBackend.FIELD_PK] = container.get(Docker.IDENTIFIER_KEY)
                 status = ContainerBackend.STATUS_RUNNING
                 # TODO: use is_running and is_suspended methods. recursion
-                if not container.get('Status').startswith(Docker.RUNNING_IDENTIFIER):
+                if not container.get(Docker.STATUS_KEY).startswith(Docker.RUNNING_IDENTIFIER):
                     status = ContainerBackend.STATUS_STOPPED
-                elif container.get('Status').endswith(Docker.PAUSED_IDENTIFIER):
+                elif container.get(Docker.STATUS_KEY).endswith(Docker.PAUSED_IDENTIFIER):
                     status = SuspendableContainerBackend.STATUS_SUSPENDED
-                container['status'] = status
+                container[ContainerBackend.FIELD_STATUS] = status
             return containers
         except Exception as ex:
             raise ContainerBackendError(ex)
@@ -275,7 +302,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerImageNotFoundError
 
         images = self.get_images()
-        return next(img for img in images if image == img.get('Id'))
+        return next(img for img in images if image == img.get(Docker.IDENTIFIER_KEY))
 
     '''
     :inherit
@@ -285,7 +312,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             images = self._client.images()
             for image in images:
                 # add required fields as per API specification
-                image['pk'] = image.get('Id')
+                image[ContainerBackend.FIELD_PK] = image.get(Docker.IDENTIFIER_KEY)
             return images
         except Exception as ex:
             raise ContainerBackendError(ex)
@@ -321,7 +348,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     '''
     def image_exists(self, image, **kwargs):
         images = self.get_images()
-        return next((img for img in images if image == img.get('Id')), False)
+        return next((img for img in images if image == img.get(Docker.IDENTIFIER_KEY)), False)
 
     '''
     :inherit
@@ -449,11 +476,6 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         return specification
 
 
-import json
-import requests
-from requests.exceptions import RequestException
-
-
 class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
                  SnapshotableContainerBackend, SuspendableContainerBackend):
     '''
@@ -508,14 +530,14 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
     '''
     def container_is_running(self, container, **kwargs):
         container = self.get_container(container)
-        return container.get('status') == ContainerBackend.STATUS_RUNNING
+        return container.get(ContainerBackend.FIELD_STATUS) == ContainerBackend.STATUS_RUNNING
 
     '''
     :inherit
     '''
     def container_is_suspended(self, container, **kwargs):
         container = self.get_container(container)
-        return container.get('status') == SuspendableContainerBackend.STATUS_SUSPENDED
+        return container.get(ContainerBackend.FIELD_STATUS) == SuspendableContainerBackend.STATUS_SUSPENDED
 
     '''
     :inherit
