@@ -265,6 +265,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 container['status'] = status
             return containers
         except Exception as ex:
+            print ex
             raise ContainerBackendError(ex)
 
     '''
@@ -801,13 +802,13 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         if status_code == requests.codes.bad_request:              # 400
             raise NotImplementedError
         elif status_code == requests.codes.not_found:              # 404
-            raise NotImplementedError
+            raise ContainerINotFoundError
         elif status_code == requests.codes.method_not_allowed:     # 405
             raise NotImplementedError
         elif status_code == requests.codes.request_timeout:        # 408
             raise NotImplementedError
         elif status_code == requests.codes.precondition_failed:    # 412
-            raise NotImplementedError
+            raise IllegalContainerStateError
         elif status_code == requests.codes.unprocessable_entity:   # 422
             raise NotImplementedError
         elif status_code == requests.codes.precondition_required:  # 428
