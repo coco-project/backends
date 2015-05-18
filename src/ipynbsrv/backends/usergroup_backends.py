@@ -20,6 +20,16 @@ class Ldap(UserGroupBackend):
 
     '''
 
+    '''
+    Key to be used in returns as unique identifier for the group.
+    '''
+    FIELD_GROUP_PK = 'cn'
+
+    '''
+    Key to be used in returns as unique identifier for the user.
+    '''
+    FIELD_USER_PK = 'cn'
+
     def __init__(self, ldap_server, admin_dn, admin_pw,
                  user_base_dn='ou=users,dc=ipynbsrv,dc=ldap',
                  group_base_dn='ou=groups,dc=ipynbsrv,dc=ldap'
@@ -36,6 +46,7 @@ class Ldap(UserGroupBackend):
         '''
         if not "ldap://" in ldap_server:
             ldap_server = "ldap://" + ldap_server
+
         self.ldap_server = ldap_server
         self.server = ldap_server
         self.admin_dn = admin_dn
@@ -79,7 +90,28 @@ class Ldap(UserGroupBackend):
 
     ''' User Functions ------------------------------------ '''
 
-    def create_user(self, username, password):
+    def get_user(self, pk, **kwargs):
+        try:
+            self.open_connection()
+
+            dn = self.get_dn_by_username(pk)
+            return self.conn.read_s(dn)
+        finally:
+            self.close_connection()
+
+    def get_users(self, **kwargs):
+        try:
+            self.open_connection()
+
+            return self.conn.search_s(self.user_base_dn, ldap.BASE_SUBTREE)
+        finally:
+            self.close_connection()
+
+    def get_users_in_group(self, group, **kwargs):
+        # TODO: what defines user - group relation?
+        raise NotImplmentedError
+
+    def create_user(self, specification, **kwargs):
         '''
         Creates LDAP user on the server
 
@@ -96,8 +128,13 @@ class Ldap(UserGroupBackend):
             Homedir in parameters?
         '''
 
-        if type(username) is not str or type(password) is not str:
-            raise ValueError("Username and Password must be strings")
+        for field in self.get_required_user_creation_fields():
+            if field[0] not in specification:
+                raise ValueError("{0} missing".format(field[0]))
+            if field[1] is not field[1]:
+                raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
+
+        username, password = specification["username"], specification["password"]
 
         try:
             self.open_connection()
@@ -118,68 +155,82 @@ class Ldap(UserGroupBackend):
         finally:
             self.close_connection()
 
-    def rename_user(self, username, username_new):
+    def rename_user(self, user, new_name, **kwargs):
         try:
             self.open_connection()
 
-            dn = self.get_dn_by_username(username)
+            dn = self.get_dn_by_username(user)
 
             # First: change name fields
-            mod_attrs = [(ldap.MOD_REPLACE, 'uid', username_new),
-                         (ldap.MOD_REPLACE, 'sn', username_new)
+            mod_attrs = [(ldap.MOD_REPLACE, 'uid', new_name),
+                         (ldap.MOD_REPLACE, 'sn', new_name)
                          ]
             self.conn.modify_s(dn, mod_attrs)
 
             # Then: copy object to new dn and delete old one
-            self.conn.modrdn_s(dn, "cn={0}".format(username_new), delold=1)
+            self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
 
         finally:
             self.close_connection()
 
-    def set_user_password(self, username, new_pw):
+    def set_user_password(self, user, password, **kwargs):
         try:
             self.open_connection()
 
-            dn = self.get_dn_by_username(username)
-            mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', new_pw)]
+            dn = self.get_dn_by_username(user)
+            mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', password)]
             self.conn.modify_s(dn, mod_attrs)
         finally:
             self.close_connection()
 
-    def delete_user(self, username):
+    def delete_user(self, user, **kwargs):
         try:
             self.open_connection()
 
-            dn = self.get_dn_by_username(username)
+            dn = self.get_dn_by_username(user)
             self.conn.delete(dn)
         finally:
             self.close_connection()
 
-    def add_user_to_group(self, username, gid):
+    def add_user_to_group(self, user, group, **kwargs):
         # TODO: check gid
         try:
             self.open_connection
 
-            dn = self.get_dn_by_username(username)
-            mod_attrs = [(ldap.MOD_ADD, 'gidNumber', [gid])]
+            dn = self.get_dn_by_username(user)
+            mod_attrs = [(ldap.MOD_ADD, 'gidNumber', [group])]
             self.conn.modify_s(dn, mod_attrs)
         finally:
             self.close_connection()
 
-    def remove_user_from_group(self, username, gid):
+    def remove_user_from_group(self, user, group, **kwargs):
         # TODO: check gid
         try:
             self.open_connection
 
-            dn = self.get_dn_by_username(username)
-            mod_attrs = [(ldap.MOD_DELETE, 'gidNumber', [gid])]
+            dn = self.get_dn_by_username(user)
+            mod_attrs = [(ldap.MOD_DELETE, 'gidNumber', [group])]
             self.conn.modify_s(dn, mod_attrs)
         finally:
             self.close_connection()
+
+        '''
+        Returns a list of field names the backend expects the input objects
+        to the create_user method to have at least.
+
+        The list should contain tuples in the form: (name, type)
+        '''
+        def get_required_user_creation_fields(self):
+            return [("username", str), ("password", str)]
 
     ''' Group Functions ------------------------------------ '''
 
-    def create_group(self, groupname):
+    def create_group(self, specification, **kwargs):
+        if "groupname" not in specification:
+            raise ValueError("Groupname needs to be provided")
+
+        groupname = specification["groupname"]
+
         if type(groupname) is not str:
             raise ValueError("Groupname must be a string")
 
@@ -198,24 +249,33 @@ class Ldap(UserGroupBackend):
         finally:
             self.close_connection()
 
-    def rename_group(self, groupname, groupname_new):
+    def rename_group(self, groupname, new_name):
         try:
             self.open_connection()
 
             dn = self.get_dn_by_groupname(groupname)
 
             # copy object to new dn and delete old one
-            self.conn.modrdn_s(dn, "cn={0}".format(groupname_new), delold=1)
+            self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
 
         finally:
             self.close_connection()
 
-    def delete_group(self, groupname):
+    def delete_group(self, group):
         # TODO: what to do with users in that group?
         try:
             self.open_connection()
 
-            dn = self.get_dn_by_groupname(groupname)
+            dn = self.get_dn_by_groupname(group)
             self.conn.delete(dn)
         finally:
             self.close_connection()
+
+    '''
+    Returns a list of field names the backend expects the input objects
+    to the create_group method to have at least.
+
+    The list should contain tuples in the form: (name, type)
+    '''
+    def get_required_group_creation_fields(self):
+        return [("groupname", str)]
