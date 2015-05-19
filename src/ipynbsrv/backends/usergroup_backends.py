@@ -95,7 +95,11 @@ class Ldap(UserGroupBackend):
             self.open_connection()
 
             dn = self.get_dn_by_username(pk)
-            return self.conn.read_s(dn)
+
+            u = self.conn.read_s(dn)
+            u['pk'] = pk
+            return u
+
         finally:
             self.close_connection()
 
@@ -103,13 +107,36 @@ class Ldap(UserGroupBackend):
         try:
             self.open_connection()
 
-            return self.conn.search_s(self.user_base_dn, ldap.BASE_SUBTREE)
+            # Get list of users and remove dn, to only have dicts in the list
+            # lda.SCOPE_ONELEVEL == 1, search only childs of dn
+            users = map(lambda x: x[1], self.conn.search_s(self.user_base_dn, ldap.SCOPE_ONELEVEL))
+
+            # Add pk to dict
+            for u in users:
+                u['pk'] = u['cn'][0]
+            return users
+
         finally:
             self.close_connection()
 
-    def get_users_in_group(self, group, **kwargs):
+    def get_users_by_group(self, group, **kwargs):
         # TODO: what defines user - group relation?
-        raise NotImplmentedError
+        try:
+            self.open_connection()
+
+            dn = self.get_dn_by_groupname(group)
+
+            g = self.conn.read_s(dn)
+
+            if 'memberUid' not in g:
+                return []
+            else:
+                users = []
+                for user in g['memberUid']:
+                    users += [{'pk': user}]
+                return users
+        finally:
+            self.close_connection()
 
     def create_user(self, specification, **kwargs):
         '''
@@ -197,8 +224,8 @@ class Ldap(UserGroupBackend):
         try:
             self.open_connection
 
-            dn = self.get_dn_by_username(user)
-            mod_attrs = [(ldap.MOD_ADD, 'gidNumber', [group])]
+            dn = self.get_dn_by_groupname(group)
+            mod_attrs = [(ldap.MOD_ADD, 'memberUid', [user])]
             self.conn.modify_s(dn, mod_attrs)
         finally:
             self.close_connection()
@@ -208,8 +235,8 @@ class Ldap(UserGroupBackend):
         try:
             self.open_connection
 
-            dn = self.get_dn_by_username(user)
-            mod_attrs = [(ldap.MOD_DELETE, 'gidNumber', [group])]
+            dn = self.get_dn_by_groupname(group)
+            mod_attrs = [(ldap.MOD_DELETE, 'memberUid', [user])]
             self.conn.modify_s(dn, mod_attrs)
         finally:
             self.close_connection()
