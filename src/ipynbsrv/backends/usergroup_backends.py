@@ -10,14 +10,6 @@ class Ldap(UserGroupBackend):
     https://www.packtpub.com/books/content/python-ldap-applications-part-1-installing-and-configuring-python-ldap-library-and-bin
     https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
 
-    tested:
-        create_user
-        create_group
-        delete_user
-        delete_group
-        rename_user
-        rename_group
-
     '''
 
     '''
@@ -120,7 +112,6 @@ class Ldap(UserGroupBackend):
             self.close_connection()
 
     def get_users_by_group(self, group, **kwargs):
-        # TODO: what defines user - group relation?
         try:
             self.open_connection()
 
