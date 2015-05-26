@@ -1,4 +1,5 @@
 from ipynbsrv.contract.backends import UserGroupBackend
+from ipynbsrv.contract.backends import GroupNotFoundError, UserNotFoundError
 import ldap
 import sys
 
@@ -22,7 +23,7 @@ class Ldap(UserGroupBackend):
     '''
     FIELD_USER_PK = 'cn'
 
-    def __init__(self, ldap_server, admin_dn, admin_pw,
+    def __init__(self, server, user, pw,
                  user_base_dn='ou=users,dc=ipynbsrv,dc=ldap',
                  group_base_dn='ou=groups,dc=ipynbsrv,dc=ldap'
                  ):
@@ -30,28 +31,28 @@ class Ldap(UserGroupBackend):
         Create a Ldap Connector
 
         Args:
-            ldap_server:    Hostname or IP of the LDAP server           
-            admin_dn:       dn of the LDAP admin user
-            admin_pw:       admin password
+            server:    Hostname or IP of the LDAP server           
+            user:       dn of the LDAP admin user
+            pw:       admin password
             user_base_dn:   Base DN for users (default: ou=users,dc=ipynbsrv,dc=ldap)
             group_base_dn:  Base DN for groups (default: ou=groups,dc=ipynbsrv,dc=ldap)
         '''
-        if not "ldap://" in ldap_server:
-            ldap_server = "ldap://" + ldap_server
+        if "ldap://" not in server:
+            server = "ldap://" + server
 
-        self.ldap_server = ldap_server
-        self.server = ldap_server
-        self.admin_dn = admin_dn
-        self.admin_pw = admin_pw
+        self.server = server
+        self.user = user
+        self.pw = pw
         self.user_base_dn = user_base_dn
         self.group_base_dn = group_base_dn
 
     ''' Helper Functions ------------------------------------ '''
 
+    # TODO: improve Exception handling
     def open_connection(self):
         try:
             self.conn = ldap.initialize(self.server)
-            self.conn.bind_s(self.admin_dn, self.admin_pw)
+            self.conn.bind_s(self.user, self.pw)
         except ldap.INVALID_CREDENTIALS:
             print("Your username or password is incorrect.")
             sys.exit()
@@ -79,18 +80,20 @@ class Ldap(UserGroupBackend):
     def get_dn_by_groupname(self, groupname):
         return "cn={0},{1}".format(groupname, self.group_base_dn)
 
-
     ''' User Functions ------------------------------------ '''
+
 
     def get_user(self, pk, **kwargs):
         try:
             self.open_connection()
 
             dn = self.get_dn_by_username(pk)
-
-            u = self.conn.read_s(dn)
-            u['pk'] = pk
-            return u
+            try:
+                u = self.conn.read_s(dn)
+                u['pk'] = pk
+                return u
+            except ldap.NO_SUCH_OBJECT:
+                raise UserNotFoundError()
 
         finally:
             self.close_connection()
