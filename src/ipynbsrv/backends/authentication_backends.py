@@ -1,5 +1,5 @@
 from ipynbsrv.conf import global_vars
-from ipynbsrv.backends.usergroup_backends import Ldap
+from ipynbsrv.backends.usergroup_backends import LdapBackend
 from ipynbsrv.contract.backends import AuthenticationBackend
 from ipynbsrv.core.models import IpynbUser
 from django.contrib.auth.models import User
@@ -10,11 +10,11 @@ class LdapAuthentication(AuthenticationBackend):
     def authenticate(self, username=None, password=None):
 
         # 1. check login credentials
-        default = global_vars._get_user_group_backend()
+        default = global_vars._get_user_backend()
         # default = Ldap('localhost', 'cn=admin,dc=ipynbsrv,dc=ldap', '1234')
         try:
             print("connect {0}@{1} mit {2}".format(username, default.server, password))
-            l = Ldap(default.server, default.get_dn_by_username(username), password)
+            l = LdapBackend(default.server, default.get_dn_by_username(username), password)
             l.open_connection()
             l.close_connection()
         except:
@@ -56,7 +56,7 @@ class LdapAuthentication(AuthenticationBackend):
             print("get user {}".format(user_id))
             u = User.objects.get(pk=user_id)
             # check if user exists on Ldap
-            l = global_vars._get_user_group_backend()
+            l = global_vars._get_user_backend()
             l.get_user(u.ipynbuser.identifier)
             print("user found {}".format(u))
             return u
