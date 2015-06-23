@@ -13,13 +13,22 @@ class LdapAuthentication(AuthenticationBackend):
         default = global_vars._get_user_backend()
         # default = Ldap('localhost', 'cn=admin,dc=ipynbsrv,dc=ldap', '1234')
         try:
-            print("connect {0}@{1} mit {2}".format(username, default.server, password))
-            l = LdapBackend(default.server, default.get_dn_by_username(username), password)
+            print("connect {0}@{1} mit Passwort {2}".format(username, default.server, password))
+            l = LdapBackend(default.server, username, password)
             l.open_connection()
             l.close_connection()
         except:
-            print("Error while authenticating")
-            return None
+            print("Authentication failed")
+            try:
+                print("connect {0}@{1} mit Passwort {2}".format(default.get_user_dn(username), default.server, password))
+                l = LdapBackend(default.server, default.get_user_dn(username), password)
+                l.open_connection()
+                l.close_connection()
+            except:
+                print("Authentication failed again")
+                return None
+
+        print "LDAP Authentication successful!"
 
         # 2. get Django user
         try:
@@ -44,7 +53,7 @@ class LdapAuthentication(AuthenticationBackend):
                 ipynbuser.user = User.objects.get(username=username)
                 ipynbuser.save()
             except Exception as e:
-                print("not able to create ipynbuser, authentication failed")
+                print("not able to create ipynbuser")
                 print(e)
                 return None
         u = User.objects.get(username=username)

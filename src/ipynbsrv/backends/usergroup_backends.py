@@ -204,13 +204,29 @@ class LdapUserBackend(UserBackend, LdapBackend):
         try:
             self.open_connection()
 
-            dn = self.get_dn_by_username(pk)
+            # set the scope for the search
+            base = self.user_base_dn
+            # set the search scope, subtree = search the base dn and all its sub-units
+            scope = ldap.SCOPE_SUBTREE
+            # set the search filter to be applied on the objects in the ldap directory
+            s_filter = '{0}={1}'.format(self.FIELD_USER_PK, pk)
             try:
-                u = self.conn.read_s(dn)
-                u['pk'] = pk
-                return u
+                u = self.conn.search_s(base, scope, filterstr=s_filter)
+                # check if single user has been found
+                if len(u) < 1:
+                    raise UserNotFoundError(pk)
+                elif len(u) > 1:
+                    raise UserNotFoundError('Result not unique, {0} users found. {1}'.format(len(u), pk))
+                else:
+                    # get the user dn
+                    user_dn = u[0][0]
+                    user_attrs = u[0][1]
+                    user_attrs['pk'] = pk
+                    user_attrs['dn'] = user_dn
+
+                    return user_attrs
             except ldap.NO_SUCH_OBJECT:
-                raise UserNotFoundError()
+                raise UserNotFoundError(pk)
 
         finally:
             self.close_connection()
@@ -222,7 +238,7 @@ class LdapUserBackend(UserBackend, LdapBackend):
             # Get list of users and remove dn, to only have dicts in the list
             # lda.SCOPE_ONELEVEL == 1, search only childs of dn
             users = map(lambda x: x[1], self.conn.search_s(self.user_base_dn, ldap.SCOPE_ONELEVEL))
-
+            
             # Add pk to dict
             for u in users:
                 u['pk'] = u['cn'][0]
