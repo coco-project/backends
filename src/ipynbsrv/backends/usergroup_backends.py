@@ -15,7 +15,9 @@ class LdapBackend(object):
     def __init__(self, server, user, pw,
                  user_base_dn='ou=users,dc=ipynbsrv,dc=ldap',
                  group_base_dn='ou=groups,dc=ipynbsrv,dc=ldap',
-                 readonly=True
+                 readonly=True,
+                 user_pk='cn',
+                 group_pk='cn'
                  ):
         '''
         Create a Ldap Connector
@@ -36,6 +38,10 @@ class LdapBackend(object):
         self.user_base_dn = user_base_dn
         self.group_base_dn = group_base_dn
         self.readonly = readonly
+        # Key to be used in returns as unique identifier for the user.
+        self.user_pk = user_pk
+        # # Key to be used in returns as unique identifier for the group.
+        self.group_pk = group_pk
 
     def get_dn_by_username(self, username):
         return "cn={0},{1}".format(username, self.user_base_dn)
@@ -73,10 +79,6 @@ class LdapBackend(object):
 
 
 class LdapGroupBackend(GroupBackend, LdapBackend):
-    '''
-    Key to be used in returns as unique identifier for the group.
-    '''
-    FIELD_GROUP_PK = 'cn'
 
     def get_users_by_group(self, group, **kwargs):
         try:
@@ -193,11 +195,6 @@ class LdapUserBackend(UserBackend, LdapBackend):
 
     '''
 
-    '''
-    Key to be used in returns as unique identifier for the user.
-    '''
-    FIELD_USER_PK = 'cn'
-
     ''' User Functions ------------------------------------ '''
 
     def get_user(self, pk, **kwargs):
@@ -209,7 +206,10 @@ class LdapUserBackend(UserBackend, LdapBackend):
             # set the search scope, subtree = search the base dn and all its sub-units
             scope = ldap.SCOPE_SUBTREE
             # set the search filter to be applied on the objects in the ldap directory
-            s_filter = '{0}={1}'.format(self.FIELD_USER_PK, pk)
+            s_filter = '{0}={1}'.format(self.user_pk, pk)
+            print "s_filter: {0}".format(s_filter)
+            print "conn.search_s('{0}', {1}, filterstr='{2}'')".format(base, scope, s_filter)
+
             try:
                 u = self.conn.search_s(base, scope, filterstr=s_filter)
                 # check if single user has been found
@@ -220,9 +220,15 @@ class LdapUserBackend(UserBackend, LdapBackend):
                 else:
                     # get the user dn
                     user_dn = u[0][0]
+                    print user_dn
                     user_attrs = u[0][1]
                     user_attrs['pk'] = pk
                     user_attrs['dn'] = user_dn
+                    if not 'homeDirectory' in user_attrs:
+                        # set homedir as /home/<username> but remove all special characters from username first
+                        user_attrs['homeDirectory'] = ['/home/{0}'.format(''.join(e for e in pk if e.isalnum()))]
+
+                    print 'return user: {0}'.format(user_attrs)
 
                     return user_attrs
             except ldap.NO_SUCH_OBJECT:
