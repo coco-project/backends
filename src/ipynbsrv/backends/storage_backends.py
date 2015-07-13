@@ -1,7 +1,6 @@
 from ipynbsrv.common.utils import FileSystem
 from ipynbsrv.contract.backends import StorageBackend
-from ipynbsrv.contract.errors import *
-from pathlib import Path
+from ipynbsrv.contract.errors import DirectoryNotFoundError, StorageBackendError
 
 
 class LocalFileSystem(StorageBackend):
@@ -69,7 +68,7 @@ class LocalFileSystem(StorageBackend):
             raise DirectoryNotFoundError("Directory does not exist.")
 
         try:
-            return self._fs.get_full_path(dir_name).as_posix()
+            return self._fs.get_full_path(dir_name)
         except Exception as ex:
             raise StorageBackendError(ex)
 
@@ -108,7 +107,10 @@ class LocalFileSystem(StorageBackend):
         if not self.dir_exists(dir_name):
             raise DirectoryNotFoundError("Directory does not exist.")
 
-        raise NotImplementedError
+        try:
+            self._fs.set_group(group, dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
 
     '''
     :inherit
@@ -118,7 +120,7 @@ class LocalFileSystem(StorageBackend):
             raise DirectoryNotFoundError("Directory does not exist.")
 
         try:
-            self._fs.set_mode(dir_name, mode)
+            self._fs.set_mode(mode, dir_name)
         except Exception as ex:
             raise StorageBackendError(ex)
 
@@ -129,4 +131,7 @@ class LocalFileSystem(StorageBackend):
         if not self.dir_exists(dir_name):
             raise DirectoryNotFoundError("Directory does not exist.")
 
-        raise NotImplementedError
+        try:
+            self._fs.set_owner(owner, dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
