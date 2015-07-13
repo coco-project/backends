@@ -1,5 +1,6 @@
 from docker import Client
 from ipynbsrv.contract.backends import *
+from ipynbsrv.contract.errors import *
 import json
 import requests
 from requests.exceptions import RequestException

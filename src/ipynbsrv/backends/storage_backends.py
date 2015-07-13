@@ -1,5 +1,6 @@
 from ipynbsrv.common.utils import FileSystem
-from ipynbsrv.contract.backends import *
+from ipynbsrv.contract.backends import StorageBackend
+from ipynbsrv.contract.errors import *
 from pathlib import Path
 
 
