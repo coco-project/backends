@@ -1,17 +1,20 @@
 from ipynbsrv.contract.backends import UserBackend, GroupBackend
-from ipynbsrv.contract.backends import UserGroupBackendError, GroupNotFoundError, UserNotFoundError
+from ipynbsrv.contract.errors import GroupBackendError, GroupNotFoundError, UserBackendError, UserNotFoundError
 import ldap
 import sys
 
 
-class ReadOnlyError(UserGroupBackendError):
+class LdapBackend(GroupBackend, UserBackend):
     '''
-    Backend error type for users/groups backends.
+    Group- and UserBackend implementation communicating with an LDAP server.
+
+    Implemented by looking at the following sources:
+
+    https://www.packtpub.com/books/content/python-ldap-applications-part-1-installing-and-configuring-python-ldap-library-and-bin
+    https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
+
     '''
-    pass
 
-
-class LdapBackend(object):
     def __init__(self, server, user, pw,
                  user_base_dn='ou=users,dc=ipynbsrv,dc=ldap',
                  group_base_dn='ou=groups,dc=ipynbsrv,dc=ldap',
@@ -77,8 +80,39 @@ class LdapBackend(object):
                 print(e)
             sys.exit()
 
+    def connect(self, credentials, **kwargs):
+        try:
+            self.conn = ldap.initialize(self.server)
+            self.conn.bind_s(credentials['username'], credentials['password'])
+        except:
+            print("connection failed, try again with username including user dn")
+            try:
+                self.conn = ldap.initialize(self.server)
+                self.conn.bind_s(get_dn_by_username(credentials['username']), credentials['password'])
+            except ldap.INVALID_CREDENTIALS:
+                print("connection failed again with username including user dn")
+                print("Your username or password is incorrect.")
+                sys.exit()
+            except ldap.LDAPError as e:
+                if type(e.message) == dict and 'desc' in e.message:
+                    print(e.message['desc'])
+                else:
+                    print(e)
+                sys.exit()
+            except Exception as e:
+                print("unknown error")
+                print(e)
 
-class LdapGroupBackend(GroupBackend, LdapBackend):
+    def disconnect(self, **kwargs):
+        self.close_connection()
+
+    def validate_login(self, credentials, **kwargs):
+        try:
+            self.connect(credentials)
+            self.disconnect()
+            return True
+        except:
+            return False
 
     def get_users_by_group(self, group, **kwargs):
         try:
@@ -185,18 +219,6 @@ class LdapGroupBackend(GroupBackend, LdapBackend):
     def get_required_group_creation_fields(self):
         return [("groupname", str)]
 
-
-class LdapUserBackend(UserBackend, LdapBackend):
-    '''
-    Implemented by looking at the following sources:
-
-    https://www.packtpub.com/books/content/python-ldap-applications-part-1-installing-and-configuring-python-ldap-library-and-bin
-    https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
-
-    '''
-
-    ''' User Functions ------------------------------------ '''
-
     def get_user(self, pk, **kwargs):
         try:
             self.open_connection()
@@ -228,7 +250,7 @@ class LdapUserBackend(UserBackend, LdapBackend):
                         # set homedir as /home/<username> but remove all special characters from username first
                         user_attrs['homeDirectory'] = ['/home/{0}'.format(''.join(e for e in pk if e.isalnum()))]
 
-                    print 'return user: {0}'.format(user_attrs)
+                    #print 'return user: {0}'.format(user_attrs)
 
                     return user_attrs
             except ldap.NO_SUCH_OBJECT:
