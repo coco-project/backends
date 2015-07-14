@@ -1,5 +1,6 @@
 from docker import Client
 from ipynbsrv.contract.backends import *
+from ipynbsrv.contract.errors import *
 import json
 import requests
 from requests.exceptions import RequestException
@@ -7,66 +8,67 @@ from requests.exceptions import RequestException
 
 class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
              SnapshotableContainerBackend, SuspendableContainerBackend):
-    '''
-    Docker container backend powered by docker-py bindings.
-    '''
 
-    '''
+    """
+    Docker container backend powered by docker-py bindings.
+    """
+
+    """
     Unique key used to identify a resource (container, image) returned by the backend.
-    '''
+    """
     IDENTIFIER_KEY = 'Id'
 
-    '''
+    """
     String to identify from a container's status field either he's paused or not.
-    '''
+    """
     PAUSED_IDENTIFIER = '(Paused)'
 
-    '''
+    """
     String to identify from a container's status field either he's running or stopped.
-    '''
+    """
     RUNNING_IDENTIFIER = 'Up'
 
-    '''
+    """
     Prefix for created container snapshots.
-    '''
+    """
     SNAPSHOT_PREFIX = 'snapshot_'
 
-    '''
+    """
     Unique key used to identify a container's status.
-    '''
+    """
     STATUS_KEY = 'Status'
 
-    '''
-    Initializes a new Docker container backend.
-
-    :param version: The Docker API version number.
-    :param base_url: The URL or unix path to the Docker API endpoint.
-    '''
     def __init__(self, version, base_url='unix://var/run/docker.sock'):
+        """
+        Initialize a new Docker container backend.
+
+        :param version: The Docker API version number.
+        :param base_url: The URL or unix path to the Docker API endpoint.
+        """
         self._client = Client(base_url=base_url, version=version)
 
-    '''
-    :inherit
-    '''
     def clone_container(self, container, clone, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def container_exists(self, container, **kwargs):
+        """
+        :inherit.
+        """
         containers = self.get_containers(only_running=False)
         return next((ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY)), False) is not False
 
-    '''
-    Checks if a container with the given name exists.
-
-    :param name: The name to check for.
-    '''
     def container_exists_by_name(self, name):
+        """
+        Check if a container with the given name exists.
+
+        :param name: The name to check for.
+        """
         containers = self.get_containers(only_running=False)
         for container in containers:
             for ct_name in container.get('Names'):
@@ -75,43 +77,43 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
 
         return False
 
-    '''
-    :inherit
-    '''
     def container_is_running(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         container = self.get_container(container)
         return container.get(Docker.STATUS_KEY).startswith(Docker.RUNNING_IDENTIFIER)
 
-    '''
-    :inherit
-    '''
     def container_is_suspended(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         container = self.get_container(container)
         return container.get(Docker.STATUS_KEY).endswith(Docker.PAUSED_IDENTIFIER)
 
-    '''
-    :inherit
-    '''
     def container_snapshot_exists(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         snapshots = self.get_container_snapshots(container)
         return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False)
 
-    '''
-    :inherit
-
-    :param specification: A dict with the fields as per get_required_container_creation_fields.
-    :param kwargs: Optional arguments for docker-py's create_container method.
-    '''
     def create_container(self, specification, **kwargs):
+        """
+        :inherit.
+
+        :param specification: A dict with the fields as per get_required_container_creation_fields.
+        :param kwargs: Optional arguments for docker-py's create_container method.
+        """
         self.validate_container_creation_specification(specification)
         if self.container_exists_by_name(container):
             raise ContainerBackendError("A container with that name already exists")
@@ -131,10 +133,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def create_container_snapshot(self, container, specification, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         # if self.container_snapshot_exists(container, name):
@@ -152,12 +154,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-
-    :param force: If true, the container doesn't need to be stopped first.
-    '''
     def delete_container(self, container, **kwargs):
+        """
+        :inherit.
+
+        :param force: If true, the container doesn't need to be stopped first.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         force = kwargs.get('force')
@@ -169,10 +171,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def delete_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_snapshot_exists(container, snapshot):
@@ -183,10 +185,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def delete_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
         if not self.image_exists(image):
             raise ContainerImageNotFoundError
 
@@ -196,10 +198,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def exec_in_container(self, container, cmd, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_is_running(container) or self.container_is_suspended(container):
@@ -211,22 +213,22 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def get_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         containers = self.get_containers(only_running=False)
         return next(ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY))
 
-    '''
-    :inherit
-
-    :param timestamps: If true, the log messages' timestamps are included.
-    '''
     def get_container_logs(self, container, **kwargs):
+        """
+        :inherit.
+
+        :param timestamps: If true, the log messages' timestamps are included.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
@@ -237,14 +239,14 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 stream=False,
                 timestamps=(timestamps is True)
             )
-            return filter(lambda x: len(x) > 0,  logs.split('\n'))  # remove empty lines
+            return filter(lambda x: len(x) > 0, logs.split('\n'))  # remove empty lines
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def get_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_snapshot_exists(container, snapshot):
@@ -253,10 +255,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         snapshots = self.get_container_snapshots(container)
         return next(sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY))
 
-    '''
-    :inherit
-    '''
     def get_container_snapshots(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
@@ -274,10 +276,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def get_containers(self, only_running=False, **kwargs):
+        """
+        :inherit.
+        """
         try:
             containers = self._client.containers(all=(not only_running))
             for container in containers:
@@ -295,20 +297,20 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             print ex
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def get_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
         if not self.image_exists(image):
             raise ContainerImageNotFoundError
 
         images = self.get_images()
         return next(img for img in images if image == img.get(Docker.IDENTIFIER_KEY))
 
-    '''
-    :inherit
-    '''
     def get_images(self, **kwargs):
+        """
+        :inherit.
+        """
         try:
             images = self._client.images()
             for image in images:
@@ -318,45 +320,45 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def get_required_container_creation_fields(self):
+        """
+        :inherit.
+        """
         return [
             ('name', basestring),
             ('image', basestring),
             ('command', basestring)
         ]
 
-    '''
-    :inherit
-    '''
     def get_required_container_start_fields(self):
+        """
+        :inherit.
+        """
         return [
             ('identifier', basestring)
         ]
 
-    '''
-    :inherit
-    '''
     def get_required_snapshot_creation_fields(self):
+        """
+        :inherit.
+        """
         return [
             ('name', basestring)
         ]
 
-    '''
-    :inherit
-    '''
     def image_exists(self, image, **kwargs):
+        """
+        :inherit.
+        """
         images = self.get_images()
         return next((img for img in images if image == img.get(Docker.IDENTIFIER_KEY)), False)
 
-    '''
-    :inherit
-
-    :param force: If true, kill the container if it doesn't want to stop.
-    '''
     def restart_container(self, container, **kwargs):
+        """
+        :inherit.
+
+        :param force: If true, kill the container if it doesn't want to stop.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
@@ -369,10 +371,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def restore_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_snapshot_exists(container, snapshot):
@@ -380,10 +382,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
 
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def resume_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_is_running(container) or not self.container_is_suspended(container):
@@ -394,12 +396,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-
-    :param kwargs: All optional arguments the docker-py library accepts as well.
-    '''
     def start_container(self, container, **kwargs):
+        """
+        :inherit.
+
+        :param kwargs: All optional arguments the docker-py library accepts as well.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if self.container_is_running(container):
@@ -410,12 +412,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-
-    :param force: If true, kill the container if it doesn't want to stop.
-    '''
     def stop_container(self, container, **kwargs):
+        """
+        :inherit.
+
+        :param force: If true, kill the container if it doesn't want to stop.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_is_running(container):
@@ -430,10 +432,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    :inherit
-    '''
     def suspend_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_is_running(container) or self.container_is_suspended(container):
@@ -444,13 +446,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    '''
-    Validates that the specification matches the definition
-    returned by the get_required_container_creation_fields method.
-
-    :param specification: The specification to validate.
-    '''
     def validate_container_creation_specification(self, specification):
+        """
+        Validate that the specification matches the definition.
+
+        :param specification: The specification to validate.
+        """
         for rname, rtype in self.get_required_container_creation_fields():
             field = specification.get(rname)
             if field is None:
@@ -460,13 +461,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
 
         return specification
 
-    '''
-    Validates that the specification matches the definition
-    returned by the get_required_container_snapshot_creation_fields method.
-
-    :param specification: The specification to validate.
-    '''
     def validate_container_snapshot_creation_specification(self, specification):
+        """
+        Validate that the specification matches the definition.
+
+        :param specification: The specification to validate.
+        """
         for rname, rtype in self.get_required_snapshot_creation_fields():
             field = specification.get(rname)
             if field is None:
@@ -479,23 +479,25 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
 
 class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
                  SnapshotableContainerBackend, SuspendableContainerBackend):
-    '''
-    The HTTP remote container backend can be used to communicate with a HTTP remote host API.
-    It is therefor considered an intermediate backend, as it does not operate on a backend directly.
-    '''
 
-    '''
+    """
+    The HTTP remote container backend can be used to communicate with a HTTP remote host API.
+
+    It is therefor considered an intermediate backend, as it does not operate on a backend directly.
+    """
+
+    """
     String that can be used as a placeholder in slugs to be replaced by the containers identifier.
-    '''
+    """
     PLACEHOLDER_CONTAINER = '<container>'
 
-    '''
-    Initializes a new HTTP remote container backend.
-
-    :param url: The base URL of the API endpoint (e.g. http://my.remote.ip:8080)
-    :param slugs: A dictionary of slugs where the various endpoints can be found (e.g. /containers for containers)
-    '''
     def __init__(self, url, slugs=None):
+        """
+        Initialize a new HTTP remote container backend.
+
+        :param url: The base URL of the API endpoint (e.g. http://my.remote.ip:8080)
+        :param slugs: A dictionary of slugs where the various endpoints can be found (e.g. /containers for containers)
+        """
         if slugs:
             if isinstance(slugs, dict):
                 self.slugs.update(slugs)
@@ -508,16 +510,16 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             'images': '/containers/images'
         }
 
-    '''
-    :inherit
-    '''
     def clone_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def container_exists(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             self.get_container(container)
             return True
@@ -526,24 +528,24 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def container_is_running(self, container, **kwargs):
+        """
+        :inherit.
+        """
         container = self.get_container(container)
         return container.get(ContainerBackend.FIELD_STATUS) == ContainerBackend.STATUS_RUNNING
 
-    '''
-    :inherit
-    '''
     def container_is_suspended(self, container, **kwargs):
+        """
+        :inherit.
+        """
         container = self.get_container(container)
         return container.get(ContainerBackend.FIELD_STATUS) == SuspendableContainerBackend.STATUS_SUSPENDED
 
-    '''
-    :inherit
-    '''
     def container_snapshot_exists(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         try:
             self.get_container_snapshot(container, snapshot)
             return True
@@ -552,10 +554,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def create_container(self, specification, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.url + self.slugs.get('containers'),
@@ -568,10 +570,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def create_container_snapshot(self, container, specification, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_snapshots_url(container),
@@ -584,10 +586,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def create_image(self, specification, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.url + self.slugs.get('images'),
@@ -600,10 +602,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def delete_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.delete(url=self.generate_container_url(container))
             if response.status_code == requests.codes.no_content:
@@ -613,10 +615,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def delete_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.delete(url=self.generate_container_snapshot_url(container, snapshot))
             if response.status_code == requests.codes.no_content:
@@ -626,10 +628,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def delete_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.delete(url=self.generate_image_url(image))
             if response.status_code == requests.codes.no_content:
@@ -639,10 +641,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def exec_in_container(self, container, cmd, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/exec',
@@ -657,43 +659,43 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    Generates the full URL with which the container resource can be accessed on the remote API.
-
-    :param container: The container identifier to generate the URL for.
-    '''
     def generate_container_url(self, container):
+        """
+        Generate the full URL with which the container resource can be accessed on the remote API.
+
+        :param container: The container identifier to generate the URL for.
+        """
         return self.url + self.slugs.get('containers') + '/' + container
 
-    '''
-    Generates the full URL with which the container's snapshot resource can be accessed on the remote API.
-
-    :param container: The container identifier to generate the snapshot URL for.
-    :param snapshot: The snapshot identifier to generate the snapshot URL for.
-    '''
     def generate_container_snapshot_url(self, container, snapshot):
+        """
+        Generate the full URL with which the container's snapshot resource can be accessed on the remote API.
+
+        :param container: The container identifier to generate the snapshot URL for.
+        :param snapshot: The snapshot identifier to generate the snapshot URL for.
+        """
         return self.url + self.slugs.get('snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container) + '/' + snapshot
 
-    '''
-    Generates the full URL with which the container's snapshot resource can be accessed on the remote API.
-
-    :param container: The container identifier to generate the snapshots URL for.
-    '''
     def generate_container_snapshots_url(self, container):
+        """
+        Generate the full URL with which the container's snapshot resource can be accessed on the remote API.
+
+        :param container: The container identifier to generate the snapshots URL for.
+        """
         return self.url + self.slugs.get('snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container)
 
-    '''
-    Generates the full URL with which the image resource can be accessed on the remote API.
-
-    :param image: The image identifier to generate the URL for.
-    '''
     def generate_image_url(self, image):
+        """
+        Generate the full URL with which the image resource can be accessed on the remote API.
+
+        :param image: The image identifier to generate the URL for.
+        """
         return self.url + self.slugs.get('images') + '/' + image
 
-    '''
-    :inherit
-    '''
     def get_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.generate_container_url(container))
             if response.status_code == requests.codes.ok:
@@ -703,10 +705,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def get_container_logs(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.generate_container_url(container) + '/logs')
             if response.status_code == requests.codes.ok:
@@ -716,10 +718,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def get_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.generate_container_snapshot_url(container, snapshot))
             if response.status_code == requests.codes.ok:
@@ -729,10 +731,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def get_container_snapshots(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.generate_container_snapshots_url(container))
             if response.status_code == requests.codes.ok:
@@ -742,10 +744,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    ''''
-    :inherit
-    '''
     def get_containers(self, only_running=False, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.url + self.slugs.get('containers'))
             if response.status_code == requests.codes.ok:
@@ -755,10 +757,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    ''''
-    :inherit
-    '''
     def get_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.generate_image_url(image))
             if response.status_code == requests.codes.ok:
@@ -768,10 +770,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    ''''
-    :inherit
-    '''
     def get_images(self, image, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.get(url=self.url + self.slugs.get('images'))
             if response.status_code == requests.codes.ok:
@@ -781,34 +783,34 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def get_required_container_creation_fields(self):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def get_required_container_start_fields(self):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def get_required_image_creation_fields(self):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def get_required_snapshot_creation_fields(self):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def image_exists(self, image):
+        """
+        :inherit.
+        """
         try:
             self.get_image(image)
             return True
@@ -817,10 +819,11 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ex
 
-    '''
-    '''
     @staticmethod
     def raise_status_code_error(status_code):
+        """
+        TODO: write doc.
+        """
         if status_code == requests.codes.bad_request:              # 400
             raise NotImplementedError
         elif status_code == requests.codes.not_found:              # 404
@@ -842,10 +845,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         else:
             raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def restart_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/restart',
@@ -858,16 +861,16 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def restore_container_snapshot(self, container, snapshot, **kwargs):
+        """
+        :inherit.
+        """
         raise NotImplementedError
 
-    '''
-    :inherit
-    '''
     def resume_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/resume',
@@ -880,10 +883,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def start_container(self, container):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/start',
@@ -896,10 +899,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def stop_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/stop',
@@ -912,10 +915,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         except RequestException as ex:
             raise ex
 
-    '''
-    :inherit
-    '''
     def suspend_container(self, container, **kwargs):
+        """
+        :inherit.
+        """
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/suspend',
