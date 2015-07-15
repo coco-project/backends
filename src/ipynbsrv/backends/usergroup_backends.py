@@ -1,5 +1,6 @@
 from ipynbsrv.contract.backends import UserBackend, GroupBackend
 from ipynbsrv.contract.errors import GroupBackendError, GroupNotFoundError, UserBackendError, UserNotFoundError
+from django.contrib.auth.hashers import make_password
 import ldap
 import sys
 
@@ -114,6 +115,41 @@ class LdapBackend(GroupBackend, UserBackend):
         except:
             return False
 
+    def get_group(self, pk, **kwargs):
+        try:
+            self.open_connection()
+
+            # set the scope for the search
+            base = self.group_base_dn
+            # set the search scope, subtree = search the base dn and all its sub-units
+            scope = ldap.SCOPE_SUBTREE
+            # set the search filter to be applied on the objects in the ldap directory
+            s_filter = '{0}={1}'.format(self.group_pk, pk)
+            print "s_filter: {0}".format(s_filter)
+            print "conn.search_s('{0}', {1}, filterstr='{2}'')".format(base, scope, s_filter)
+
+            try:
+                u = self.conn.search_s(base, scope, filterstr=s_filter)
+                # check if single user has been found
+                if len(u) < 1:
+                    raise GroupNotFoundError(pk)
+                elif len(u) > 1:
+                    raise GroupNotFoundError('Result not unique, {0} groups found. {1}'.format(len(u), pk))
+                else:
+                    # get the user dn
+                    group_dn = u[0][0]
+                    print group_dn
+                    group_attrs = u[0][1]
+                    group_attrs['pk'] = pk
+                    group_attrs['dn'] = group_dn
+
+                    return group_attrs
+            except ldap.NO_SUCH_OBJECT:
+                raise GroupNotFoundError(pk)
+
+        finally:
+            self.close_connection()
+
     def get_users_by_group(self, group, **kwargs):
         try:
             self.open_connection()
@@ -164,7 +200,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if "groupname" not in specification:
             raise ValueError("Groupname needs to be provided")
 
-        groupname = specification["groupname"]
+        groupname, gidNumber, memberUid = specification["groupname"], specification["gidNumber"], specification["memberUid"]
 
         if type(groupname) is not str:
             raise ValueError("Groupname must be a string")
@@ -176,9 +212,9 @@ class LdapBackend(GroupBackend, UserBackend):
 
             add_record = [
                 ('objectclass', ['posixGroup', 'top']),
-                ('gidNumber', ['2500']),  # Where does this come from?
+                ('gidNumber', [gidNumber]),  # Where does this come from?
                 ('cn', [groupname]),
-                ('memberUid', '')  # TODO: What goes here?
+                ('memberUid', [memberUid])  # TODO: What goes here?
             ]
             self.conn.add_s(dn, add_record)
         finally:
@@ -302,24 +338,26 @@ class LdapBackend(GroupBackend, UserBackend):
                 raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
 
         # encrypt the password, using django internal tools
-        username, password = specification["username"], make_password(specification["password"])
+        username, password, uidNumber = specification["username"], str(make_password(specification["password"])), specification["uidNumber"]
 
         try:
             self.open_connection()
 
             dn = self.get_dn_by_username(username)
 
+            # create user
             add_record = [
                 ('objectclass', ['person', 'organizationalperson', 'inetorgperson', 'posixAccount', 'top']),
                 ('uid', [username]),
-                ('uidNumber', ['2500']),
-                ('gidNumber', ['2500']),
+                ('uidNumber', [uidNumber]),
+                ('gidNumber', [uidNumber]),
                 ('cn', [username]),
                 ('sn', [username]),
                 ('userpassword', [password]),
                 ('homedirectory', ['/home/test'])
             ]
             self.conn.add_s(dn, add_record)
+
         finally:
             print("user created")
             self.close_connection()
@@ -374,4 +412,4 @@ class LdapBackend(GroupBackend, UserBackend):
     The list should contain tuples in the form: (name, type)
     '''
     def get_required_user_creation_fields(self):
-        return [("username", str), ("password", str)]
+        return [("username", str), ("password", str), ("uidNumber", str)]
