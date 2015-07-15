@@ -42,10 +42,8 @@ class LdapBackend(GroupBackend, UserBackend):
         self.user_base_dn = user_base_dn
         self.group_base_dn = group_base_dn
         self.readonly = readonly
-        # Key to be used in returns as unique identifier for the user.
-        self.user_pk = user_pk
-        # # Key to be used in returns as unique identifier for the group.
-        self.group_pk = group_pk
+        self.FIELD_USER_ID = user_pk
+        self.FIELD_GROUP_ID = group_pk
 
     def get_dn_by_username(self, username):
         return "cn={0},{1}".format(username, self.user_base_dn)
@@ -60,50 +58,45 @@ class LdapBackend(GroupBackend, UserBackend):
         try:
             self.conn = ldap.initialize(self.server)
             self.conn.bind_s(self.user, self.pw)
+        except ldap.CONNECT_ERROR:
+            raise ConnectionError
+        except ldap.SERVER_DOWN:
+            raise ConnectionError
         except ldap.INVALID_CREDENTIALS:
-            print("Your username or password is incorrect.")
-            sys.exit()
+            raise AuthenticationError
         except ldap.LDAPError as e:
             if type(e.message) == dict and 'desc' in e.message:
-                print(e.message['desc'])
+                raise UserBackendError(e.message['desc'])
             else:
-                print(e)
-            sys.exit()
+                raise UserBackendError(e)
 
     def close_connection(self):
         try:
             self.conn.unbind()
         except Exception as e:
-            print("Problem closing connection")
-            if type(e.message) == dict and 'desc' in e.message:
-                print(e.message['desc'])
-            else:
-                print(e)
-            sys.exit()
+            # do nothing, maybe 
+            pass
 
     def connect(self, credentials, **kwargs):
         try:
             self.conn = ldap.initialize(self.server)
             self.conn.bind_s(credentials['username'], credentials['password'])
         except:
-            print("connection failed, try again with username including user dn")
+            # try again with user dn added manually
             try:
                 self.conn = ldap.initialize(self.server)
                 self.conn.bind_s(get_dn_by_username(credentials['username']), credentials['password'])
+            except ldap.CONNECT_ERROR:
+                raise ConnectionError
+            except ldap.SERVER_DOWN:
+                raise ConnectionError
             except ldap.INVALID_CREDENTIALS:
-                print("connection failed again with username including user dn")
-                print("Your username or password is incorrect.")
-                sys.exit()
+                raise AuthenticationError
             except ldap.LDAPError as e:
                 if type(e.message) == dict and 'desc' in e.message:
-                    print(e.message['desc'])
+                    raise UserBackendError(e.message['desc'])
                 else:
-                    print(e)
-                sys.exit()
-            except Exception as e:
-                print("unknown error")
-                print(e)
-                raise(ConnectionError)
+                    raise UserBackendError(e)
 
     def disconnect(self, **kwargs):
         self.close_connection()
@@ -125,9 +118,7 @@ class LdapBackend(GroupBackend, UserBackend):
             # set the search scope, subtree = search the base dn and all its sub-units
             scope = ldap.SCOPE_SUBTREE
             # set the search filter to be applied on the objects in the ldap directory
-            s_filter = '{0}={1}'.format(self.group_pk, pk)
-            print "s_filter: {0}".format(s_filter)
-            print "conn.search_s('{0}', {1}, filterstr='{2}'')".format(base, scope, s_filter)
+            s_filter = '{0}={1}'.format(self.FIELD_GROUP_ID, pk)
 
             try:
                 u = self.conn.search_s(base, scope, filterstr=s_filter)
@@ -139,9 +130,8 @@ class LdapBackend(GroupBackend, UserBackend):
                 else:
                     # get the user dn
                     group_dn = u[0][0]
-                    print group_dn
                     group_attrs = u[0][1]
-                    group_attrs['pk'] = pk
+                    group_attrs[self.FIELD_GROUP_ID] = pk
                     group_attrs['dn'] = group_dn
 
                     return group_attrs
@@ -164,8 +154,10 @@ class LdapBackend(GroupBackend, UserBackend):
             else:
                 users = []
                 for user in g['memberUid']:
-                    users += [{'pk': user}]
+                    users += [{self.FIELD_USER_ID: user}]
                 return users
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -179,6 +171,8 @@ class LdapBackend(GroupBackend, UserBackend):
             dn = self.get_dn_by_groupname(group)
             mod_attrs = [(ldap.MOD_ADD, 'memberUid', [user])]
             self.conn.modify_s(dn, mod_attrs)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -192,14 +186,19 @@ class LdapBackend(GroupBackend, UserBackend):
             dn = self.get_dn_by_groupname(group)
             mod_attrs = [(ldap.MOD_DELETE, 'memberUid', [user])]
             self.conn.modify_s(dn, mod_attrs)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
     def create_group(self, specification, **kwargs):
         if self.readonly:
             raise ReadOnlyError
-        if "groupname" not in specification:
-            raise ValueError("Groupname needs to be provided")
+        for field in self.get_required_group_creation_fields():
+            if field[0] not in specification:
+                raise ValueError("{0} missing".format(field[0]))
+            if field[1] is not field[1]:
+                raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
 
         groupname, gidNumber, memberUid = specification["groupname"], specification["gidNumber"], specification["memberUid"]
 
@@ -218,6 +217,8 @@ class LdapBackend(GroupBackend, UserBackend):
                 ('memberUid', [memberUid])
             ]
             self.conn.add_s(dn, add_record)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -231,7 +232,8 @@ class LdapBackend(GroupBackend, UserBackend):
 
             # copy object to new dn and delete old one
             self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
-
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -244,6 +246,8 @@ class LdapBackend(GroupBackend, UserBackend):
 
             dn = self.get_dn_by_groupname(group)
             self.conn.delete(dn)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -265,9 +269,7 @@ class LdapBackend(GroupBackend, UserBackend):
             # set the search scope, subtree = search the base dn and all its sub-units
             scope = ldap.SCOPE_SUBTREE
             # set the search filter to be applied on the objects in the ldap directory
-            s_filter = '{0}={1}'.format(self.user_pk, pk)
-            print "s_filter: {0}".format(s_filter)
-            print "conn.search_s('{0}', {1}, filterstr='{2}'')".format(base, scope, s_filter)
+            s_filter = '{0}={1}'.format(self.FIELD_USER_ID, pk)
 
             try:
                 u = self.conn.search_s(base, scope, filterstr=s_filter)
@@ -279,15 +281,13 @@ class LdapBackend(GroupBackend, UserBackend):
                 else:
                     # get the user dn
                     user_dn = u[0][0]
-                    print user_dn
                     user_attrs = u[0][1]
-                    user_attrs['pk'] = pk
+                    user_attrs[self.FIELD_USER_ID] = pk
                     user_attrs['dn'] = user_dn
 
                     return user_attrs
             except ldap.NO_SUCH_OBJECT:
                 raise UserNotFoundError(pk)
-
         finally:
             self.close_connection()
 
@@ -301,9 +301,10 @@ class LdapBackend(GroupBackend, UserBackend):
 
             # Add pk to dict
             for u in users:
-                u['pk'] = u['cn'][0]
+                u[self.FIELD_USER_ID] = u['cn'][0]
             return users
-
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -353,9 +354,12 @@ class LdapBackend(GroupBackend, UserBackend):
                 ('homedirectory', [homeDirectory])
             ]
             self.conn.add_s(dn, add_record)
-
+        except Exception as e:
+            if type(e.message) == dict and 'desc' in e.message:
+                raise UserBackendError(e.message['desc'])
+            else:
+                raise UserBackendError(e)
         finally:
-            print("user created")
             self.close_connection()
 
     def rename_user(self, user, new_name, **kwargs):
@@ -374,7 +378,8 @@ class LdapBackend(GroupBackend, UserBackend):
 
             # Then: copy object to new dn and delete old one
             self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
-
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -387,6 +392,8 @@ class LdapBackend(GroupBackend, UserBackend):
             dn = self.get_dn_by_username(user)
             mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', password)]
             self.conn.modify_s(dn, mod_attrs)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
@@ -398,6 +405,8 @@ class LdapBackend(GroupBackend, UserBackend):
 
             dn = self.get_dn_by_username(user)
             self.conn.delete(dn)
+        except Exception as e:
+            raise UserBackendError(e)
         finally:
             self.close_connection()
 
