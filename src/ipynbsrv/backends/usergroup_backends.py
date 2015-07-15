@@ -266,7 +266,7 @@ class LdapBackend(GroupBackend, UserBackend):
             # Get list of users and remove dn, to only have dicts in the list
             # lda.SCOPE_ONELEVEL == 1, search only childs of dn
             users = map(lambda x: x[1], self.conn.search_s(self.user_base_dn, ldap.SCOPE_ONELEVEL))
-            
+
             # Add pk to dict
             for u in users:
                 u['pk'] = u['cn'][0]
@@ -301,7 +301,8 @@ class LdapBackend(GroupBackend, UserBackend):
             if field[1] is not field[1]:
                 raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
 
-        username, password = specification["username"], specification["password"]
+        # encrypt the password, using django internal tools
+        username, password = specification["username"], make_password(specification["password"])
 
         try:
             self.open_connection()
@@ -320,6 +321,7 @@ class LdapBackend(GroupBackend, UserBackend):
             ]
             self.conn.add_s(dn, add_record)
         finally:
+            print("user created")
             self.close_connection()
 
     def rename_user(self, user, new_name, **kwargs):
