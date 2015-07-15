@@ -1,8 +1,7 @@
 from ipynbsrv.contract.backends import UserBackend, GroupBackend
-from ipynbsrv.contract.errors import ConnectionError, GroupBackendError, GroupNotFoundError, ReadOnlyError, UserBackendError, UserNotFoundError
+from ipynbsrv.contract.errors import AuthenticationError, ConnectionError, GroupBackendError, GroupNotFoundError, ReadOnlyError, UserBackendError, UserNotFoundError
 from django.contrib.auth.hashers import make_password
 import ldap
-import sys
 
 
 class LdapBackend(GroupBackend, UserBackend):
@@ -23,16 +22,19 @@ class LdapBackend(GroupBackend, UserBackend):
                  user_pk='cn',
                  group_pk='cn'
                  ):
-        '''
+        """
         Create a Ldap Connector
 
-        Args:
-            server:    Hostname or IP of the LDAP server
-            user:       dn of the LDAP admin user
-            pw:       admin password
-            user_base_dn:   Base DN for users (default: ou=users,dc=ipynbsrv,dc=ldap)
-            group_base_dn:  Base DN for groups (default: ou=groups,dc=ipynbsrv,dc=ldap)
-        '''
+        :param server           Hostname or IP of the LDAP server
+        :param user             Admin user name
+        :param pw               Admin password
+        :param user_base_dn     Base DN for users (default: ou=users,dc=ipynbsrv,dc=ldap)
+        :param group_base_dn    Base DN for groups (default: ou=groups,dc=ipynbsrv,dc=ldap)
+        :param readonly         Indicate if system has readonly or readwrite access (default: True)
+        :param user_pk          primary identicication key for users
+        :param group_pk         primary identicication key for groups
+        """
+
         if "ldap://" not in server:
             server = "ldap://" + server
 
@@ -51,19 +53,16 @@ class LdapBackend(GroupBackend, UserBackend):
     def get_dn_by_groupname(self, groupname):
         return "cn={0},{1}".format(groupname, self.group_base_dn)
 
-    ''' Helper Functions ------------------------------------ '''
-
-    # TODO: improve Exception handling
     def open_connection(self):
         try:
             self.conn = ldap.initialize(self.server)
             self.conn.bind_s(self.user, self.pw)
         except ldap.CONNECT_ERROR:
-            raise ConnectionError
+            raise ConnectionError('CONNECT_ERROR')
         except ldap.SERVER_DOWN:
-            raise ConnectionError
+            raise ConnectionError('SERVER_DOWN')
         except ldap.INVALID_CREDENTIALS:
-            raise AuthenticationError
+            raise AuthenticationError('INVALID_CREDENTIALS')
         except ldap.LDAPError as e:
             if type(e.message) == dict and 'desc' in e.message:
                 raise UserBackendError(e.message['desc'])
@@ -73,8 +72,8 @@ class LdapBackend(GroupBackend, UserBackend):
     def close_connection(self):
         try:
             self.conn.unbind()
-        except Exception as e:
-            # do nothing, maybe 
+        except:
+            # do nothing
             pass
 
     def connect(self, credentials, **kwargs):
@@ -85,11 +84,14 @@ class LdapBackend(GroupBackend, UserBackend):
             # try again with user dn added manually
             try:
                 self.conn = ldap.initialize(self.server)
-                self.conn.bind_s(get_dn_by_username(credentials['username']), credentials['password'])
+                username = self.get_dn_by_username(credentials['username'])
+                self.conn.bind_s(username, credentials['password'])
             except ldap.CONNECT_ERROR:
-                raise ConnectionError
+                raise ConnectionError('CONNECT_ERROR')
             except ldap.SERVER_DOWN:
-                raise ConnectionError
+                raise ConnectionError('SERVER_DOWN')
+            except ldap.TIMEOUT:
+                raise ConnectionError('TIMEOUT')
             except ldap.INVALID_CREDENTIALS:
                 raise AuthenticationError
             except ldap.LDAPError as e:
@@ -251,13 +253,13 @@ class LdapBackend(GroupBackend, UserBackend):
         finally:
             self.close_connection()
 
-    '''
-    Returns a list of field names the backend expects the input objects
-    to the create_group method to have at least.
-
-    The list should contain tuples in the form: (name, type)
-    '''
     def get_required_group_creation_fields(self):
+        """
+        Returns a list of field names the backend expects the input objects
+        to the create_group method to have at least.
+
+        The list should contain tuples in the form: (name, type)
+        """
         return [("groupname", str), ("gidNumber", str), ("memberUid", str)]
 
     def get_user(self, pk, **kwargs):
@@ -309,21 +311,16 @@ class LdapBackend(GroupBackend, UserBackend):
             self.close_connection()
 
     def create_user(self, specification, **kwargs):
-        '''
-        Creates LDAP user on the server
+        """
+        Creates a LDAP user on the server using the `specifications` 
+        as defined by `get_required_user_creation_fields`.
 
-        Args:
+        :param specification:  required fields to create  user
 
-            username:   name of the user to create
-            password:   password for the new user
+        :returns:
 
-        Returns:
-
-        Raises:
-
-        Todo:
-            Homedir in parameters?
-        '''
+        :raises:    ValueError, UserBackendError
+        """
 
         if self.readonly:
             raise ReadOnlyError
@@ -341,6 +338,8 @@ class LdapBackend(GroupBackend, UserBackend):
             self.open_connection()
 
             dn = self.get_dn_by_username(username)
+
+            print(homeDirectory)
 
             # create user
             add_record = [
@@ -404,17 +403,20 @@ class LdapBackend(GroupBackend, UserBackend):
             self.open_connection()
 
             dn = self.get_dn_by_username(user)
-            self.conn.delete(dn)
+            self.conn.delete_s(dn)
+            return True
+        except ldap.NO_SUCH_OBJECT:
+            return False
         except Exception as e:
             raise UserBackendError(e)
         finally:
             self.close_connection()
 
-    '''
-    Returns a list of field names the backend expects the input objects
-    to the create_user method to have at least.
-
-    The list should contain tuples in the form: (name, type)
-    '''
     def get_required_user_creation_fields(self):
+        """
+        Returns a list of field names the backend expects the input objects
+        to the create_user method to have at least.
+
+        The list should contain tuples in the form: (name, type)
+        """
         return [("username", str), ("password", str), ("uidNumber", str), ("homeDirectory", str)]
