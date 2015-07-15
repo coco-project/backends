@@ -45,7 +45,10 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         :param version: The Docker API version number.
         :param base_url: The URL or unix path to the Docker API endpoint.
         """
-        self._client = Client(base_url=base_url, version=version)
+        try:
+            self._client = Client(base_url=base_url, version=version)
+        except Exception as ex:
+            raise ConnectionError(ex)
 
     def clone_container(self, container, clone, **kwargs):
         """
@@ -346,6 +349,16 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             ('name', basestring)
         ]
 
+    def get_status(self):
+        """
+        :inherit.
+        """
+        try:
+            self._client.info()
+            return ContainerBackend.BACKEND_STATUS_OK
+        except Exception:
+            return ContainerBackend.BACKEND_STATUS_ERROR
+
     def image_exists(self, image, **kwargs):
         """
         :inherit.
@@ -568,7 +581,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def create_container_snapshot(self, container, specification, **kwargs):
         """
@@ -584,7 +599,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def create_image(self, specification, **kwargs):
         """
@@ -600,7 +617,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def delete_container(self, container, **kwargs):
         """
@@ -613,7 +632,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def delete_container_snapshot(self, container, snapshot, **kwargs):
         """
@@ -626,7 +647,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def delete_image(self, image, **kwargs):
         """
@@ -639,7 +662,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def exec_in_container(self, container, cmd, **kwargs):
         """
@@ -657,7 +682,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def generate_container_url(self, container):
         """
@@ -703,7 +730,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_container_logs(self, container, **kwargs):
         """
@@ -716,7 +745,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_container_snapshot(self, container, snapshot, **kwargs):
         """
@@ -729,7 +760,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_container_snapshots(self, container, **kwargs):
         """
@@ -742,7 +775,7 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ContainerBackendError(ex)
 
     def get_containers(self, only_running=False, **kwargs):
         """
@@ -755,7 +788,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_image(self, image, **kwargs):
         """
@@ -768,7 +803,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_images(self, image, **kwargs):
         """
@@ -781,7 +818,7 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ContainerBackendError(ex)
 
     def get_required_container_creation_fields(self):
         """
@@ -807,6 +844,21 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         """
         raise NotImplementedError
 
+    def get_status(self):
+        """
+        :inherit.
+        """
+        try:
+            response = requests.get(url=self.url + '/health')
+            if response.status_code == requests.codes.ok:
+                return response.json().get('backends').get('container').get('status')
+            else:
+                HttpRemote.raise_status_code_error(response.status_code)
+        except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
     def image_exists(self, image):
         """
         :inherit.
@@ -814,10 +866,10 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         try:
             self.get_image(image)
             return True
-        except NotFounderror:
+        except NotFoundError:
             return False
         except Exception as ex:
-            raise ex
+            raise ContainerBackendError(ex)
 
     @staticmethod
     def raise_status_code_error(status_code):
@@ -859,7 +911,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def restore_container_snapshot(self, container, snapshot, **kwargs):
         """
@@ -881,7 +935,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def start_container(self, container):
         """
@@ -897,7 +953,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def stop_container(self, container, **kwargs):
         """
@@ -913,7 +971,9 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def suspend_container(self, container, **kwargs):
         """
@@ -929,4 +989,6 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
             else:
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
-            raise ex
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
