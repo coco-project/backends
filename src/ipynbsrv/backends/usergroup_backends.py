@@ -334,7 +334,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
 
         # encrypt the password, using django internal tools
-        username, password, uidNumber = specification["username"], str(make_password(specification["password"])), specification["uidNumber"]
+        username, password, uidNumber, homeDirectory = specification["username"], str(make_password(specification["password"])), specification["uidNumber"], specification["homeDirectory"]
 
         try:
             self.open_connection()
@@ -350,7 +350,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 ('cn', [username]),
                 ('sn', [username]),
                 ('userpassword', [password]),
-                ('homedirectory', ['/home/{}'.format(username)])
+                ('homedirectory', [homeDirectory)
             ]
             self.conn.add_s(dn, add_record)
 
@@ -408,4 +408,4 @@ class LdapBackend(GroupBackend, UserBackend):
     The list should contain tuples in the form: (name, type)
     '''
     def get_required_user_creation_fields(self):
-        return [("username", str), ("password", str), ("uidNumber", str), ("homedirectory", str)]
+        return [("username", str), ("password", str), ("uidNumber", str), ("homeDirectory", str)]
