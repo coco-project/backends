@@ -350,7 +350,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 ('cn', [username]),
                 ('sn', [username]),
                 ('userpassword', [password]),
-                ('homedirectory', [homeDirectory)
+                ('homedirectory', [homeDirectory])
             ]
             self.conn.add_s(dn, add_record)
 
