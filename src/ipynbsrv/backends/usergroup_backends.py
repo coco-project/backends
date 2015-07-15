@@ -1,5 +1,5 @@
 from ipynbsrv.contract.backends import UserBackend, GroupBackend
-from ipynbsrv.contract.errors import GroupBackendError, GroupNotFoundError, UserBackendError, UserNotFoundError
+from ipynbsrv.contract.errors import ConnectionError, GroupBackendError, GroupNotFoundError, ReadOnlyError, UserBackendError, UserNotFoundError
 from django.contrib.auth.hashers import make_password
 import ldap
 import sys
@@ -27,7 +27,7 @@ class LdapBackend(GroupBackend, UserBackend):
         Create a Ldap Connector
 
         Args:
-            server:    Hostname or IP of the LDAP server           
+            server:    Hostname or IP of the LDAP server
             user:       dn of the LDAP admin user
             pw:       admin password
             user_base_dn:   Base DN for users (default: ou=users,dc=ipynbsrv,dc=ldap)
@@ -103,6 +103,7 @@ class LdapBackend(GroupBackend, UserBackend):
             except Exception as e:
                 print("unknown error")
                 print(e)
+                raise(ConnectionError)
 
     def disconnect(self, **kwargs):
         self.close_connection()
@@ -212,9 +213,9 @@ class LdapBackend(GroupBackend, UserBackend):
 
             add_record = [
                 ('objectclass', ['posixGroup', 'top']),
-                ('gidNumber', [gidNumber]),  # Where does this come from?
+                ('gidNumber', [gidNumber]),
                 ('cn', [groupname]),
-                ('memberUid', [memberUid])  # TODO: What goes here?
+                ('memberUid', [memberUid])
             ]
             self.conn.add_s(dn, add_record)
         finally:
@@ -253,7 +254,7 @@ class LdapBackend(GroupBackend, UserBackend):
     The list should contain tuples in the form: (name, type)
     '''
     def get_required_group_creation_fields(self):
-        return [("groupname", str)]
+        return [("groupname", str), ("gidNumber", str), ("memberUid", str)]
 
     def get_user(self, pk, **kwargs):
         try:
@@ -282,11 +283,6 @@ class LdapBackend(GroupBackend, UserBackend):
                     user_attrs = u[0][1]
                     user_attrs['pk'] = pk
                     user_attrs['dn'] = user_dn
-                    if not 'homeDirectory' in user_attrs:
-                        # set homedir as /home/<username> but remove all special characters from username first
-                        user_attrs['homeDirectory'] = ['/home/{0}'.format(''.join(e for e in pk if e.isalnum()))]
-
-                    #print 'return user: {0}'.format(user_attrs)
 
                     return user_attrs
             except ldap.NO_SUCH_OBJECT:
@@ -354,7 +350,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 ('cn', [username]),
                 ('sn', [username]),
                 ('userpassword', [password]),
-                ('homedirectory', ['/home/test'])
+                ('homedirectory', ['/home/{}'.format(username)])
             ]
             self.conn.add_s(dn, add_record)
 
@@ -412,4 +408,4 @@ class LdapBackend(GroupBackend, UserBackend):
     The list should contain tuples in the form: (name, type)
     '''
     def get_required_user_creation_fields(self):
-        return [("username", str), ("password", str), ("uidNumber", str)]
+        return [("username", str), ("password", str), ("uidNumber", str), ("homedirectory", str)]
