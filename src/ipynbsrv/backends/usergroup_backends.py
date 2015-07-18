@@ -57,13 +57,13 @@ class LdapBackend(GroupBackend, UserBackend):
         try:
             user_ldap = LdapBackend(self.server, self.base_dn, self.users_dn)
             user_ldap.connect({
-                'dn': self.get_full_user_dn(user),
+                'dn': user_ldap.get_full_user_dn(user),
                 'password': credential
             })
             user_ldap.disconnect()
             return self.get_user(user)
-        except ldap.INVALID_CREDENTIALS as ex:
-            raise AuthenticationError(ex)
+        except AuthenticationError as ex:
+            raise ex
         except ldap.LDAPError as ex:
             raise ConnectionError(ex)
         except Exception as ex:
