@@ -1,422 +1,497 @@
-from ipynbsrv.contract.backends import UserBackend, GroupBackend
-from ipynbsrv.contract.errors import AuthenticationError, ConnectionError, GroupBackendError, GroupNotFoundError, ReadOnlyError, UserBackendError, UserNotFoundError
-from django.contrib.auth.hashers import make_password
+from ipynbsrv.contract.backends import GroupBackend, UserBackend
+from ipynbsrv.contract.errors import *
 import ldap
 
 
 class LdapBackend(GroupBackend, UserBackend):
-    '''
+
+    """
     Group- and UserBackend implementation communicating with an LDAP server.
 
     Implemented by looking at the following sources:
 
     https://www.packtpub.com/books/content/python-ldap-applications-part-1-installing-and-configuring-python-ldap-library-and-bin
     https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
+    """
 
-    '''
-
-    def __init__(self, server, user, pw,
-                 user_base_dn='ou=users,dc=ipynbsrv,dc=ldap',
-                 group_base_dn='ou=groups,dc=ipynbsrv,dc=ldap',
-                 readonly=True,
-                 user_pk='cn',
-                 group_pk='cn'
-                 ):
-        """
-        Create a Ldap Connector
-
-        :param server           Hostname or IP of the LDAP server
-        :param user             Admin user name
-        :param pw               Admin password
-        :param user_base_dn     Base DN for users (default: ou=users,dc=ipynbsrv,dc=ldap)
-        :param group_base_dn    Base DN for groups (default: ou=groups,dc=ipynbsrv,dc=ldap)
-        :param readonly         Indicate if system has readonly or readwrite access (default: True)
-        :param user_pk          primary identicication key for users
-        :param group_pk         primary identicication key for groups
+    def __init__(self, server, base_dn, users_ou=None, groups_ou=None, readonly=False):
         """
 
+        """
         if "ldap://" not in server:
             server = "ldap://" + server
 
-        self.server = server
-        self.user = user
-        self.pw = pw
-        self.user_base_dn = user_base_dn
-        self.group_base_dn = group_base_dn
+        self.base_dn = base_dn
+        self.groups_ou = groups_ou
         self.readonly = readonly
-        self.FIELD_USER_ID = user_pk
-        self.FIELD_GROUP_ID = group_pk
+        self.server = server
+        self.users_ou = users_ou
 
-    def get_dn_by_username(self, username):
-        return "cn={0},{1}".format(username, self.user_base_dn)
+    def add_group_member(self, group, user, **kwargs):
+        """
+        :inherit.
+        """
+        if self.readonly:
+            raise ReadOnlyError
+        if not self.group_exists(group):
+            raise GroupNotFoundError
+        if not self.user_exists(user):
+            raise UserNotFoundError
 
-    def get_dn_by_groupname(self, groupname):
-        return "cn={0},{1}".format(groupname, self.group_base_dn)
-
-    def open_connection(self):
+        dn = self.get_full_group_dn(group)
+        mod_attrs = [
+            (ldap.MOD_ADD, 'memberUid', [user])
+        ]
         try:
-            self.conn = ldap.initialize(self.server)
-            self.conn.bind_s(self.user, self.pw)
-        except ldap.CONNECT_ERROR:
-            raise ConnectionError('CONNECT_ERROR')
-        except ldap.SERVER_DOWN:
-            raise ConnectionError('SERVER_DOWN')
-        except ldap.INVALID_CREDENTIALS:
-            raise AuthenticationError('INVALID_CREDENTIALS')
-        except ldap.LDAPError as e:
-            if type(e.message) == dict and 'desc' in e.message:
-                raise UserBackendError(e.message['desc'])
-            else:
-                raise UserBackendError(e)
+            self.cnx.modify_s(dn, mod_attrs)
+        except Exception as ex:
+            raise GroupBackendError(ex)
 
-    def close_connection(self):
+    def auth_user(self, user, credential, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
         try:
-            self.conn.unbind()
-        except:
-            # do nothing
-            pass
+            user_ldap = LdapBackend(self.server, self.base_dn, self.users_ou)
+            user_ldap.connect({
+                'dn': self.get_full_user_dn(user),
+                'password': credential
+            })
+            user_ldap.disconnect()
+            return self.get_user(user)
+        except ldap.INVALID_CREDENTIALS as ex:
+            raise AuthenticationError(ex)
+        except ldap.LDAPError as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
 
     def connect(self, credentials, **kwargs):
+        """
+        :inherit.
+        """
+        dn = credentials.get('dn')
+        if dn is None:
+            username = credentials.get('username')
+        else:
+            username = dn
+
         try:
-            self.conn = ldap.initialize(self.server)
-            self.conn.bind_s(credentials['username'], credentials['password'])
-        except:
-            # try again with user dn added manually
-            try:
-                self.conn = ldap.initialize(self.server)
-                username = self.get_dn_by_username(credentials['username'])
-                self.conn.bind_s(username, credentials['password'])
-            except ldap.CONNECT_ERROR:
-                raise ConnectionError('CONNECT_ERROR')
-            except ldap.SERVER_DOWN:
-                raise ConnectionError('SERVER_DOWN')
-            except ldap.TIMEOUT:
-                raise ConnectionError('TIMEOUT')
-            except ldap.INVALID_CREDENTIALS:
-                raise AuthenticationError
-            except ldap.LDAPError as e:
-                if type(e.message) == dict and 'desc' in e.message:
-                    raise UserBackendError(e.message['desc'])
-                else:
-                    raise UserBackendError(e)
-
-    def disconnect(self, **kwargs):
-        self.close_connection()
-
-    def validate_login(self, credentials, **kwargs):
-        try:
-            self.connect(credentials)
-            self.disconnect()
-            return True
-        except:
-            return False
-
-    def get_group(self, pk, **kwargs):
-        try:
-            self.open_connection()
-
-            # set the scope for the search
-            base = self.group_base_dn
-            # set the search scope, subtree = search the base dn and all its sub-units
-            scope = ldap.SCOPE_SUBTREE
-            # set the search filter to be applied on the objects in the ldap directory
-            s_filter = '{0}={1}'.format(self.FIELD_GROUP_ID, pk)
-
-            try:
-                u = self.conn.search_s(base, scope, filterstr=s_filter)
-                # check if single user has been found
-                if len(u) < 1:
-                    raise GroupNotFoundError(pk)
-                elif len(u) > 1:
-                    raise GroupNotFoundError('Result not unique, {0} groups found. {1}'.format(len(u), pk))
-                else:
-                    # get the user dn
-                    group_dn = u[0][0]
-                    group_attrs = u[0][1]
-                    group_attrs[self.FIELD_GROUP_ID] = pk
-                    group_attrs['dn'] = group_dn
-
-                    return group_attrs
-            except ldap.NO_SUCH_OBJECT:
-                raise GroupNotFoundError(pk)
-
-        finally:
-            self.close_connection()
-
-    def get_users_by_group(self, group, **kwargs):
-        try:
-            self.open_connection()
-
-            dn = self.get_dn_by_groupname(group)
-
-            g = self.conn.read_s(dn)
-
-            if 'memberUid' not in g:
-                return []
-            else:
-                users = []
-                for user in g['memberUid']:
-                    users += [{self.FIELD_USER_ID: user}]
-                return users
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def add_user_to_group(self, user, group, **kwargs):
-        if self.readonly:
-            raise ReadOnlyError
-        # TODO: check gid
-        try:
-            self.open_connection
-
-            dn = self.get_dn_by_groupname(group)
-            mod_attrs = [(ldap.MOD_ADD, 'memberUid', [user])]
-            self.conn.modify_s(dn, mod_attrs)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def remove_user_from_group(self, user, group, **kwargs):
-        if self.readonly:
-            raise ReadOnlyError
-        # TODO: check gid
-        try:
-            self.open_connection
-
-            dn = self.get_dn_by_groupname(group)
-            mod_attrs = [(ldap.MOD_DELETE, 'memberUid', [user])]
-            self.conn.modify_s(dn, mod_attrs)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
+            self.cnx = ldap.initialize(self.server)
+            self.cnx.bind_s(username, credentials.get('password'))
+        except ldap.INVALID_CREDENTIALS as ex:
+            raise AuthenticationError(ex)
+        except ldap.LDAPError as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
 
     def create_group(self, specification, **kwargs):
-        if self.readonly:
-            raise ReadOnlyError
-        for field in self.get_required_group_creation_fields():
-            if field[0] not in specification:
-                raise ValueError("{0} missing".format(field[0]))
-            if field[1] is not field[1]:
-                raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
-
-        groupname, gidNumber, memberUid = specification["groupname"], specification["gidNumber"], specification["memberUid"]
-
-        if type(groupname) is not str:
-            raise ValueError("Groupname must be a string")
-
-        try:
-            self.open_connection()
-
-            dn = self.get_dn_by_groupname(groupname)
-
-            add_record = [
-                ('objectclass', ['posixGroup', 'top']),
-                ('gidNumber', [gidNumber]),
-                ('cn', [groupname]),
-                ('memberUid', [memberUid])
-            ]
-            self.conn.add_s(dn, add_record)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def rename_group(self, groupname, new_name):
-        if self.readonly:
-            raise ReadOnlyError
-        try:
-            self.open_connection()
-
-            dn = self.get_dn_by_groupname(groupname)
-
-            # copy object to new dn and delete old one
-            self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def delete_group(self, group):
-        if self.readonly:
-            raise ReadOnlyError
-        # TODO: what to do with users in that group?
-        try:
-            self.open_connection()
-
-            dn = self.get_dn_by_groupname(group)
-            self.conn.delete(dn)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def get_required_group_creation_fields(self):
         """
-        Returns a list of field names the backend expects the input objects
-        to the create_group method to have at least.
-
-        The list should contain tuples in the form: (name, type)
+        :inherit.
         """
-        return [("groupname", str), ("gidNumber", str), ("memberUid", str)]
+        if self.readonly:
+            raise ReadOnlyError
+        self.validate_group_creation_specification(specification)
+        # TODO: check if such a group already exists
 
-    def get_user(self, pk, **kwargs):
+        name = specification.get('name')
+        gid = specification.get('gidNumber')
+        record = [
+            ('objectclass', [
+                'posixGroup',
+                'top'
+            ]),
+            ('cn', [name]),
+            ('gidNumber', [str(gid)]),
+            ('memberUid', [memberUid])  # FIXME: hmm..
+        ]
+        dn = self.get_full_group_dn(name)
         try:
-            self.open_connection()
-
-            # set the scope for the search
-            base = self.user_base_dn
-            # set the search scope, subtree = search the base dn and all its sub-units
-            scope = ldap.SCOPE_SUBTREE
-            # set the search filter to be applied on the objects in the ldap directory
-            s_filter = '{0}={1}'.format(self.FIELD_USER_ID, pk)
-
-            try:
-                u = self.conn.search_s(base, scope, filterstr=s_filter)
-                # check if single user has been found
-                if len(u) < 1:
-                    raise UserNotFoundError(pk)
-                elif len(u) > 1:
-                    raise UserNotFoundError('Result not unique, {0} users found. {1}'.format(len(u), pk))
-                else:
-                    # get the user dn
-                    user_dn = u[0][0]
-                    user_attrs = u[0][1]
-                    user_attrs[self.FIELD_USER_ID] = pk
-                    user_attrs['dn'] = user_dn
-
-                    return user_attrs
-            except ldap.NO_SUCH_OBJECT:
-                raise UserNotFoundError(pk)
-        finally:
-            self.close_connection()
-
-    def get_users(self, **kwargs):
-        try:
-            self.open_connection()
-
-            # Get list of users and remove dn, to only have dicts in the list
-            # lda.SCOPE_ONELEVEL == 1, search only childs of dn
-            users = map(lambda x: x[1], self.conn.search_s(self.user_base_dn, ldap.SCOPE_ONELEVEL))
-
-            # Add pk to dict
-            for u in users:
-                u[self.FIELD_USER_ID] = u['cn'][0]
-            return users
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
+            self.cnx.add_s(dn, record)
+            group = {}
+            # TODO: add more fields
+            group[GroupBackend.FIELD_ID] = gid
+            group[GroupBackend.FIELD_PK] = name
+            return group
+        except Exception as ex:
+            raise GroupBackendError(ex)
 
     def create_user(self, specification, **kwargs):
         """
-        Creates a LDAP user on the server using the `specifications` 
-        as defined by `get_required_user_creation_fields`.
-
-        :param specification:  required fields to create  user
-
-        :returns:
-
-        :raises:    ValueError, UserBackendError
+        :inherit.
         """
-
         if self.readonly:
             raise ReadOnlyError
+        self.validate_user_creation_specification(specification)
+        # TODO: check if such a user already exists
 
-        for field in self.get_required_user_creation_fields():
-            if field[0] not in specification:
-                raise ValueError("{0} missing".format(field[0]))
-            if field[1] is not field[1]:
-                raise ValueError("{0} must be of type {1}".format(field[0], field[1]))
-
-        # encrypt the password, using django internal tools
-        username, password, uidNumber, homeDirectory = specification["username"], str(make_password(specification["password"])), specification["uidNumber"], specification["homeDirectory"]
-
+        username = specification.get('username')
+        uid = specification.get('uidNumber')
+        dn = self.get_full_user_dn(username)
+        record = [
+            ('objectclass', [
+                'person',
+                'organizationalperson',
+                'inetorgperson',
+                'posixAccount',
+                'top'
+            ]),
+            ('cn', [username]),
+            ('sn', [username]),
+            ('uid', [username]),
+            ('uidNumber', [str(uid)]),
+            ('gidNumber', [str(specification.get('gidNumber'))]),  # FIXME: hmm..
+            ('userpassword', [specification.get('password')]),
+            ('homedirectory', [specification.get('homeDirectory')])
+        ]
         try:
-            self.open_connection()
+            self.cnx.add_s(dn, record)
+            user = {}
+            # TODO: add more fields
+            user[UserBackend.FIELD_ID] = uid
+            user[UserBackend.FIELD_PK] = username
+            return user
+        except Exception as ex:
+            raise UserBackendError(ex)
 
-            dn = self.get_dn_by_username(username)
-
-            print(homeDirectory)
-
-            # create user
-            add_record = [
-                ('objectclass', ['person', 'organizationalperson', 'inetorgperson', 'posixAccount', 'top']),
-                ('uid', [username]),
-                ('uidNumber', [uidNumber]),
-                ('gidNumber', [uidNumber]),
-                ('cn', [username]),
-                ('sn', [username]),
-                ('userpassword', [password]),
-                ('homedirectory', [homeDirectory])
-            ]
-            self.conn.add_s(dn, add_record)
-        except Exception as e:
-            if type(e.message) == dict and 'desc' in e.message:
-                raise UserBackendError(e.message['desc'])
-            else:
-                raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def rename_user(self, user, new_name, **kwargs):
+    def delete_group(self, group, **kwargs):
+        """
+        :inherit.
+        """
         if self.readonly:
             raise ReadOnlyError
+        if not self.group_exist(group):
+            raise GroupNotFoundError
+
+        dn = self.get_full_group_dn(group)
         try:
-            self.open_connection()
-
-            dn = self.get_dn_by_username(user)
-
-            # First: change name fields
-            mod_attrs = [(ldap.MOD_REPLACE, 'uid', new_name),
-                         (ldap.MOD_REPLACE, 'sn', new_name)
-                         ]
-            self.conn.modify_s(dn, mod_attrs)
-
-            # Then: copy object to new dn and delete old one
-            self.conn.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
-
-    def set_user_password(self, user, password, **kwargs):
-        if self.readonly:
-            raise ReadOnlyError
-        try:
-            self.open_connection()
-
-            dn = self.get_dn_by_username(user)
-            mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', password)]
-            self.conn.modify_s(dn, mod_attrs)
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
+            self.cnx.delete_s(dn)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise GroupNotFoundError(ex)
+        except Exception as ex:
+            raise GroupBackendError(ex)
 
     def delete_user(self, user, **kwargs):
+        """
+        :inherit.
+        """
         if self.readonly:
             raise ReadOnlyError
-        try:
-            self.open_connection()
+        if not self.user_exists(user):
+            raise UserNotFoundError
 
-            dn = self.get_dn_by_username(user)
-            self.conn.delete_s(dn)
-            return True
-        except ldap.NO_SUCH_OBJECT:
-            return False
-        except Exception as e:
-            raise UserBackendError(e)
-        finally:
-            self.close_connection()
+        dn = self.get_full_user_dn(user)
+        try:
+            self.cnx.delete_s(dn)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise UserNotFoundError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+    def disconnect(self, **kwargs):
+        """
+        :inherit.
+        """
+        try:
+            self.cnx.unbind_s()
+        except ldap.LDAPError as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+    def get_full_dn(self, cn):
+        """
+        TODO: write doc.
+        """
+        return "%s,%s" % (cn, self.base_dn)
+
+    def get_full_group_dn(self, group):
+        """
+        TODO: write doc.
+        """
+        return self.get_full_dn("cn=%s,ou=%s" % (group, self.groups_ou))
+
+    def get_full_user_dn(self, user):
+        """
+        TODO: write doc.
+        """
+        return self.get_full_dn("cn=%s,ou=%s" % (user, self.users_ou))
+
+    def get_required_group_creation_fields(self):
+        """
+        :inherit.
+        """
+        return [
+            ('groupname', str),
+            ('gidNumber', int),
+            ('memberUid', str)
+        ]
 
     def get_required_user_creation_fields(self):
         """
-        Returns a list of field names the backend expects the input objects
-        to the create_user method to have at least.
-
-        The list should contain tuples in the form: (name, type)
+        :inherit.
         """
-        return [("username", str), ("password", str), ("uidNumber", str), ("homeDirectory", str)]
+        return [
+            ('username', str),
+            ('uidNumber', int),
+            ('gidNumber', int),
+            ('password', str),
+            ('homeDirectory', str)
+        ]
+
+    def get_group(self, group, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.group_exists(group):
+            raise GroupNotFoundError
+
+        base = self.get_full_dn('ou=' + self.groups_ou)
+        scope = ldap.SCOPE_SUBTREE
+        s_filter = 'cn=' + group
+        result = None
+        try:
+            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise GroupNotFoundError(ex)
+        except Exception as ex:
+            raise GroupBackendError(ex)
+
+        matches = len(result)
+        if matches == 0:
+            raise GroupNotFoundError
+        elif matches != 1:
+            raise GroupBackendError("Multiple groups found")
+        else:
+            group = result[0][1]
+            group[UserBackend.FIELD_ID] = int(group.get('gidNumber')[0])
+            group[UserBackend.FIELD_PK] = group.get('cn')[0]
+            return group
+
+    def get_group_members(self, group, **kwargs):
+        if not self.group_exists(group):
+            raise GroupNotFoundError
+
+        group = None
+        dn = self.get_full_group_dn(group)
+        try:
+            group = self.cnx.read_s(dn)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise GroupNotFoundError(ex)
+        except Exception as ex:
+            raise GroupBackendError(ex)
+
+        if group is None or 'memberUid' not in group:
+            return []
+        else:
+            users = []
+            for user in group.get('memberUid'):
+                users += self.get_user(user)
+            return users
+
+    def get_groups(self, **kwargs):
+        """
+        :inherit.
+        """
+        base = self.get_full_dn('ou=' + self.groups_ou)
+        scope = ldap.SCOPE_ONELEVEL
+        try:
+            # get list of groups and remove dn, to only have dicts in the list
+            # lda.SCOPE_ONELEVEL == 1, search only childs of dn
+            groups = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            for group in groups:
+                group[UserBackend.FIELD_ID] = int(group.get('gidNumber')[0])
+                group[UserBackend.FIELD_PK] = group.get('cn')[0]
+            return groups
+        except Exception as e:
+            raise GroupBackendError(e)
+
+    def get_user(self, user, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
+        base = self.get_full_dn('ou=' + self.users_ou)
+        scope = ldap.SCOPE_SUBTREE
+        s_filter = 'cn=' + user
+        result = None
+        try:
+            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise UserNotFoundError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+        matches = len(result)
+        if matches == 0:
+            raise UserNotFoundError
+        elif matches != 1:
+            raise UserBackendError("Multiple users found")
+        else:
+            user = result[0][1]
+            user[UserBackend.FIELD_ID] = int(user.get('uidNumber')[0])
+            user[UserBackend.FIELD_PK] = user.get('cn')[0]
+            return user
+
+    def get_users(self, **kwargs):
+        """
+        :inherit.
+        """
+        base = self.get_full_dn('ou=' + self.users_ou)
+        scope = ldap.SCOPE_ONELEVEL
+        try:
+            # get list of users and remove dn, to only have dicts in the list
+            # lda.SCOPE_ONELEVEL == 1, search only childs of dn
+            users = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            for user in users:
+                user[UserBackend.FIELD_ID] = int(user.get('uidNumber')[0])
+                user[UserBackend.FIELD_PK] = user.get('cn')[0]
+            return users
+        except Exception as e:
+            raise UserBackendError(e)
+
+    def group_exists(self, group):
+        """
+        :inherit.
+        """
+        base = self.get_full_dn("ou=" + self.groups_ou)
+        scope = ldap.SCOPE_ONELEVEL
+        try:
+            result = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            return len(result) != 0
+        except ldap.NO_SUCH_OBJECT:
+            return False
+        except Exception as ex:
+            raise GroupBackendError(ex)
+
+    def remove_group_member(self, group, user, **kwargs):
+        """
+        :inherit.
+        """
+        if self.readonly:
+            raise ReadOnlyError
+        if not self.group_exist(group):
+            raise GroupNotFoundError
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
+        dn = self.get_full_group_dn(group)
+        mod_attrs = [
+            (ldap.MOD_DELETE, 'memberUid', [user])
+        ]
+        try:
+            self.cnx.modify_s(dn, mod_attrs)
+        except Exception as ex:
+            raise GroupBackendError(ex)
+
+    def rename_group(self, group, new_name, **kwargs):
+        """
+        :inherit.
+        """
+        if self.readonly:
+            raise ReadOnlyError
+        if not self.group_exists(group):
+            raise GroupNotFoundError
+
+        dn = self.get_full_group_dn(group)
+        try:
+            # TODO: update memberUid gidNumbers
+            # copy object to new dn and delete old one
+            self.cnx.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise GroupNotFoundError(ex)
+        except Exception as ex:
+            raise GroupBackendError(ex)
+
+    def rename_user(self, user, new_name, **kwargs):
+        """
+        :inherit.
+        """
+        if self.readonly:
+            raise ReadOnlyError
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
+        dn = self.get_full_user_dn(user)
+        mod_attrs = [
+            (ldap.MOD_REPLACE, 'uid', new_name),
+            (ldap.MOD_REPLACE, 'sn', new_name)
+        ]
+        try:
+            # TODO: update groups memberUids
+            # first: change name fields
+            self.cnx.modify_s(dn, mod_attrs)
+            # then: copy object to new dn and delete old one
+            self.cnx.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise UserNotFoundError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+    def set_user_credential(self, user, credential, **kwargs):
+        """
+        :inherit.
+        """
+        if self.readonly:
+            raise ReadOnlyError
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
+        dn = self.get_full_user_dn(user)
+        mod_attrs = [
+            (ldap.MOD_REPLACE, 'userpassword', password)
+        ]
+        try:
+            self.cnx.modify_s(dn, mod_attrs)
+        except ldap.NO_SUCH_OBJECT as ex:
+            raise UserNotFoundError(ex)
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+    def user_exists(self, user):
+        """
+        :inherit.
+        """
+        base = self.get_full_dn("ou=" + self.users_ou)
+        scope = ldap.SCOPE_ONELEVEL
+        try:
+            result = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            return len(result) != 0
+        except ldap.NO_SUCH_OBJECT:
+            return False
+        except Exception as ex:
+            raise UserBackendError(ex)
+
+    def validate_group_creation_specification(self, specification):
+        """
+        Validate that the specification matches the definition.
+
+        :param specification: The specification to validate.
+        """
+        for rname, rtype in self.get_required_group_creation_fields():
+            field = specification.get(rname)
+            # TODO: raise errors
+            if field is None:
+                pass
+            elif not isinstance(field, rtype):
+                pass
+
+    def validate_user_creation_specification(self, specification):
+        """
+        Validate that the specification matches the definition.
+
+        :param specification: The specification to validate.
+        """
+        for rname, rtype in self.get_required_user_creation_fields():
+            field = specification.get(rname)
+            # TODO: raise errors
+            if field is None:
+                pass
+            elif not isinstance(field, rtype):
+                pass
