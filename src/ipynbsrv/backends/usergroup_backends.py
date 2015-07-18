@@ -14,7 +14,7 @@ class LdapBackend(GroupBackend, UserBackend):
     https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
     """
 
-    def __init__(self, server, base_dn, users_ou=None, groups_ou=None, readonly=False):
+    def __init__(self, server, base_dn, users_dn=None, groups_dn=None, readonly=False):
         """
 
         """
@@ -22,10 +22,10 @@ class LdapBackend(GroupBackend, UserBackend):
             server = "ldap://" + server
 
         self.base_dn = base_dn
-        self.groups_ou = groups_ou
+        self.groups_dn = groups_dn
         self.readonly = readonly
         self.server = server
-        self.users_ou = users_ou
+        self.users_dn = users_dn
 
     def add_group_member(self, group, user, **kwargs):
         """
@@ -213,13 +213,13 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         TODO: write doc.
         """
-        return self.get_full_dn("cn=%s,ou=%s" % (group, self.groups_ou))
+        return self.get_full_dn("cn=%s,%s" % (group, self.groups_ou))
 
     def get_full_user_dn(self, user):
         """
         TODO: write doc.
         """
-        return self.get_full_dn("cn=%s,ou=%s" % (user, self.users_ou))
+        return self.get_full_dn("cn=%s,%s" % (user, self.users_ou))
 
     def get_required_group_creation_fields(self):
         """
@@ -250,7 +250,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.group_exists(group):
             raise GroupNotFoundError
 
-        base = self.get_full_dn('ou=' + self.groups_ou)
+        base = self.get_full_dn(self.groups_ou)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + group
         result = None
@@ -297,7 +297,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn('ou=' + self.groups_ou)
+        base = self.get_full_dn(self.groups_ou)
         scope = ldap.SCOPE_ONELEVEL
         try:
             # get list of groups and remove dn, to only have dicts in the list
@@ -317,7 +317,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.user_exists(user):
             raise UserNotFoundError
 
-        base = self.get_full_dn('ou=' + self.users_ou)
+        base = self.get_full_dn(self.users_ou)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         result = None
@@ -343,7 +343,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn('ou=' + self.users_ou)
+        base = self.get_full_dn(self.users_ou)
         scope = ldap.SCOPE_ONELEVEL
         try:
             # get list of users and remove dn, to only have dicts in the list
@@ -360,7 +360,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn('ou=' + self.groups_ou)
+        base = self.get_full_dn(self.groups_ou)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + group
         result = None
@@ -460,7 +460,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn('ou=' + self.users_ou)
+        base = self.get_full_dn(self.users_ou)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         try:
