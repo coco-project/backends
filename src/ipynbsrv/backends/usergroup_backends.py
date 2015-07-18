@@ -163,7 +163,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         if self.readonly:
             raise ReadOnlyError
-        if not self.group_exist(group):
+        if not self.group_exists(group):
             raise GroupNotFoundError
 
         dn = self.get_full_group_dn(str(group))
@@ -256,22 +256,19 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.group_exists(group):
             raise GroupNotFoundError
 
-        group = None
+        result = None
         dn = self.get_full_group_dn(group)
         try:
-            group = self.cnx.read_s(str(dn))
+            result = self.cnx.read_s(str(dn))
         except ldap.NO_SUCH_OBJECT as ex:
             raise GroupNotFoundError(ex)
         except Exception as ex:
             raise GroupBackendError(ex)
 
-        if group is None or 'memberUid' not in group:
-            return []
-        else:
-            users = []
-            for user in group.get('memberUid'):
-                users += self.get_user(user)
-            return users
+        users = []
+        for user in result.get('memberUid', []):
+            users += self.get_user(user)
+        return users
 
     def get_groups(self, **kwargs):
         """
@@ -379,10 +376,8 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         if self.readonly:
             raise ReadOnlyError
-        if not self.group_exist(group):
+        if not self.group_exists(group):
             raise GroupNotFoundError
-        if not self.user_exists(user):
-            raise UserNotFoundError
 
         dn = self.get_full_group_dn(group)
         mod_attrs = [
