@@ -55,7 +55,7 @@ class LdapBackend(GroupBackend, UserBackend):
             raise UserNotFoundError
 
         try:
-            user_ldap = LdapBackend(self.server, self.base_dn, self.users_ou)
+            user_ldap = LdapBackend(self.server, self.base_dn, self.users_dn)
             user_ldap.connect({
                 'dn': self.get_full_user_dn(user),
                 'password': credential
@@ -213,13 +213,13 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         TODO: write doc.
         """
-        return self.get_full_dn("cn=%s,%s" % (group, self.groups_ou))
+        return self.get_full_dn("cn=%s,%s" % (group, self.groups_dn))
 
     def get_full_user_dn(self, user):
         """
         TODO: write doc.
         """
-        return self.get_full_dn("cn=%s,%s" % (user, self.users_ou))
+        return self.get_full_dn("cn=%s,%s" % (user, self.users_dn))
 
     def get_required_group_creation_fields(self):
         """
@@ -250,7 +250,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.group_exists(group):
             raise GroupNotFoundError
 
-        base = self.get_full_dn(self.groups_ou)
+        base = self.get_full_dn(self.groups_dn)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + group
         result = None
@@ -297,7 +297,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn(self.groups_ou)
+        base = self.get_full_dn(self.groups_dn)
         scope = ldap.SCOPE_ONELEVEL
         try:
             # get list of groups and remove dn, to only have dicts in the list
@@ -317,7 +317,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.user_exists(user):
             raise UserNotFoundError
 
-        base = self.get_full_dn(self.users_ou)
+        base = self.get_full_dn(self.users_dn)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         result = None
@@ -343,7 +343,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn(self.users_ou)
+        base = self.get_full_dn(self.users_dn)
         scope = ldap.SCOPE_ONELEVEL
         try:
             # get list of users and remove dn, to only have dicts in the list
@@ -360,7 +360,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn(self.groups_ou)
+        base = self.get_full_dn(self.groups_dn)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + group
         result = None
@@ -460,7 +460,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn(self.users_ou)
+        base = self.get_full_dn(self.users_dn)
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         try:
