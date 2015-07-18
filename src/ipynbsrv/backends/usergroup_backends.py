@@ -106,8 +106,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 'top'
             ]),
             ('cn', [name]),
-            ('gidNumber', [str(gid)]),
-            ('memberUid', [str(memberUid)])  # FIXME: hmm..
+            ('gidNumber', [str(gid)])
         ]
         dn = self.get_full_group_dn(name)
         try:
@@ -221,28 +220,6 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         return self.get_full_dn("cn=%s,%s" % (user, self.users_dn))
 
-    def get_required_group_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('groupname', str),
-            ('gidNumber', int),
-            ('memberUid', str)
-        ]
-
-    def get_required_user_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('username', str),
-            ('uidNumber', int),
-            ('gidNumber', int),
-            ('password', str),
-            ('homeDirectory', str)
-        ]
-
     def get_group(self, group, **kwargs):
         """
         :inherit.
@@ -273,6 +250,9 @@ class LdapBackend(GroupBackend, UserBackend):
             return group
 
     def get_group_members(self, group, **kwargs):
+        """
+        :inherit.
+        """
         if not self.group_exists(group):
             raise GroupNotFoundError
 
@@ -309,6 +289,27 @@ class LdapBackend(GroupBackend, UserBackend):
             return groups
         except Exception as e:
             raise GroupBackendError(e)
+
+    def get_required_group_creation_fields(self):
+        """
+        :inherit.
+        """
+        return [
+            ('groupname', str),
+            ('gidNumber', int)
+        ]
+
+    def get_required_user_creation_fields(self):
+        """
+        :inherit.
+        """
+        return [
+            ('username', str),
+            ('uidNumber', int),
+            ('gidNumber', int),
+            ('password', str),
+            ('homeDirectory', str)
+        ]
 
     def get_user(self, user, **kwargs):
         """
