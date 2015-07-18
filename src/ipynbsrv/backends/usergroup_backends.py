@@ -98,14 +98,14 @@ class LdapBackend(GroupBackend, UserBackend):
         self.validate_group_creation_specification(specification)
         # TODO: check if such a group already exists
 
-        name = specification.get('name')
+        name = specification.get('groupname')
         gid = specification.get('gidNumber')
         record = [
             ('objectclass', [
                 'posixGroup',
                 'top'
             ]),
-            ('cn', [name]),
+            ('cn', [str(name)]),
             ('gidNumber', [str(gid)])
         ]
         dn = self.get_full_group_dn(name)
