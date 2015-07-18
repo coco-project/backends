@@ -360,12 +360,14 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn("ou=" + self.groups_ou)
-        scope = ldap.SCOPE_ONELEVEL
+        base = self.get_full_dn('ou=' + self.groups_ou)
+        scope = ldap.SCOPE_SUBTREE
+        s_filter = 'cn=' + group
+        result = None
         try:
-            result = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            result = self.cnx.search_s(base, scope, filterstr=s_filter)
             return len(result) != 0
-        except ldap.NO_SUCH_OBJECT:
+        except ldap.NO_SUCH_OBJECT as ex:
             return False
         except Exception as ex:
             raise GroupBackendError(ex)
@@ -458,12 +460,13 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         :inherit.
         """
-        base = self.get_full_dn("ou=" + self.users_ou)
-        scope = ldap.SCOPE_ONELEVEL
+        base = self.get_full_dn('ou=' + self.users_ou)
+        scope = ldap.SCOPE_SUBTREE
+        s_filter = 'cn=' + user
         try:
-            result = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            result = self.cnx.search_s(base, scope, filterstr=s_filter)
             return len(result) != 0
-        except ldap.NO_SUCH_OBJECT:
+        except ldap.NO_SUCH_OBJECT as ex:
             return False
         except Exception as ex:
             raise UserBackendError(ex)
