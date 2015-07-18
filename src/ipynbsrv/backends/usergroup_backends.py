@@ -40,10 +40,10 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_group_dn(group)
         mod_attrs = [
-            (ldap.MOD_ADD, 'memberUid', [user])
+            (ldap.MOD_ADD, 'memberUid', [str(user)])
         ]
         try:
-            self.cnx.modify_s(dn, mod_attrs)
+            self.cnx.modify_s(str(dn), mod_attrs)
         except Exception as ex:
             raise GroupBackendError(ex)
 
@@ -81,7 +81,7 @@ class LdapBackend(GroupBackend, UserBackend):
 
         try:
             self.cnx = ldap.initialize(self.server)
-            self.cnx.bind_s(username, credentials.get('password'))
+            self.cnx.bind_s(str(username), str(credentials.get('password')))
         except ldap.INVALID_CREDENTIALS as ex:
             raise AuthenticationError(ex)
         except ldap.LDAPError as ex:
@@ -107,11 +107,11 @@ class LdapBackend(GroupBackend, UserBackend):
             ]),
             ('cn', [name]),
             ('gidNumber', [str(gid)]),
-            ('memberUid', [memberUid])  # FIXME: hmm..
+            ('memberUid', [str(memberUid)])  # FIXME: hmm..
         ]
         dn = self.get_full_group_dn(name)
         try:
-            self.cnx.add_s(dn, record)
+            self.cnx.add_s(str(dn), record)
             group = {}
             # TODO: add more fields
             group[GroupBackend.FIELD_ID] = gid
@@ -140,16 +140,16 @@ class LdapBackend(GroupBackend, UserBackend):
                 'posixAccount',
                 'top'
             ]),
-            ('cn', [username]),
-            ('sn', [username]),
-            ('uid', [username]),
+            ('cn', [str(username)]),
+            ('sn', [str(username)]),
+            ('uid', [str(username)]),
             ('uidNumber', [str(uid)]),
             ('gidNumber', [str(specification.get('gidNumber'))]),  # FIXME: hmm..
-            ('userpassword', [specification.get('password')]),
-            ('homedirectory', [specification.get('homeDirectory')])
+            ('userpassword', [str(specification.get('password'))]),
+            ('homedirectory', [str(specification.get('homeDirectory'))])
         ]
         try:
-            self.cnx.add_s(dn, record)
+            self.cnx.add_s(str(dn), record)
             user = {}
             # TODO: add more fields
             user[UserBackend.FIELD_ID] = uid
@@ -167,7 +167,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.group_exist(group):
             raise GroupNotFoundError
 
-        dn = self.get_full_group_dn(group)
+        dn = self.get_full_group_dn(str(group))
         try:
             self.cnx.delete_s(dn)
         except ldap.NO_SUCH_OBJECT as ex:
@@ -186,7 +186,7 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         try:
-            self.cnx.delete_s(dn)
+            self.cnx.delete_s(str(dn))
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -255,7 +255,7 @@ class LdapBackend(GroupBackend, UserBackend):
         s_filter = 'cn=' + group
         result = None
         try:
-            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+            result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
         except ldap.NO_SUCH_OBJECT as ex:
             raise GroupNotFoundError(ex)
         except Exception as ex:
@@ -279,7 +279,7 @@ class LdapBackend(GroupBackend, UserBackend):
         group = None
         dn = self.get_full_group_dn(group)
         try:
-            group = self.cnx.read_s(dn)
+            group = self.cnx.read_s(str(dn))
         except ldap.NO_SUCH_OBJECT as ex:
             raise GroupNotFoundError(ex)
         except Exception as ex:
@@ -302,7 +302,7 @@ class LdapBackend(GroupBackend, UserBackend):
         try:
             # get list of groups and remove dn, to only have dicts in the list
             # lda.SCOPE_ONELEVEL == 1, search only childs of dn
-            groups = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            groups = map(lambda x: x[1], self.cnx.search_s(str(base), scope))
             for group in groups:
                 group[UserBackend.FIELD_ID] = int(group.get('gidNumber')[0])
                 group[UserBackend.FIELD_PK] = group.get('cn')[0]
@@ -322,7 +322,7 @@ class LdapBackend(GroupBackend, UserBackend):
         s_filter = 'cn=' + user
         result = None
         try:
-            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+            result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -348,7 +348,7 @@ class LdapBackend(GroupBackend, UserBackend):
         try:
             # get list of users and remove dn, to only have dicts in the list
             # lda.SCOPE_ONELEVEL == 1, search only childs of dn
-            users = map(lambda x: x[1], self.cnx.search_s(base, scope))
+            users = map(lambda x: x[1], self.cnx.search_s(str(base), scope))
             for user in users:
                 user[UserBackend.FIELD_ID] = int(user.get('uidNumber')[0])
                 user[UserBackend.FIELD_PK] = user.get('cn')[0]
@@ -365,7 +365,7 @@ class LdapBackend(GroupBackend, UserBackend):
         s_filter = 'cn=' + group
         result = None
         try:
-            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+            result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
             return len(result) != 0
         except ldap.NO_SUCH_OBJECT as ex:
             return False
@@ -385,10 +385,10 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_group_dn(group)
         mod_attrs = [
-            (ldap.MOD_DELETE, 'memberUid', [user])
+            (ldap.MOD_DELETE, 'memberUid', [str(user)])
         ]
         try:
-            self.cnx.modify_s(dn, mod_attrs)
+            self.cnx.modify_s(str(dn), mod_attrs)
         except Exception as ex:
             raise GroupBackendError(ex)
 
@@ -405,7 +405,7 @@ class LdapBackend(GroupBackend, UserBackend):
         try:
             # TODO: update memberUid gidNumbers
             # copy object to new dn and delete old one
-            self.cnx.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
+            self.cnx.modrdn_s(str(dn), str("cn=%s" % new_name), delold=1)
         except ldap.NO_SUCH_OBJECT as ex:
             raise GroupNotFoundError(ex)
         except Exception as ex:
@@ -422,15 +422,15 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         mod_attrs = [
-            (ldap.MOD_REPLACE, 'uid', new_name),
-            (ldap.MOD_REPLACE, 'sn', new_name)
+            (ldap.MOD_REPLACE, 'uid', str(new_name)),
+            (ldap.MOD_REPLACE, 'sn', str(new_name))
         ]
         try:
             # TODO: update groups memberUids
             # first: change name fields
-            self.cnx.modify_s(dn, mod_attrs)
+            self.cnx.modify_s(str(dn), mod_attrs)
             # then: copy object to new dn and delete old one
-            self.cnx.modrdn_s(dn, "cn={0}".format(new_name), delold=1)
+            self.cnx.modrdn_s(str(dn), str("cn=%s" % new_name), delold=1)
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -447,10 +447,10 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         mod_attrs = [
-            (ldap.MOD_REPLACE, 'userpassword', password)
+            (ldap.MOD_REPLACE, 'userpassword', str(credential))
         ]
         try:
-            self.cnx.modify_s(dn, mod_attrs)
+            self.cnx.modify_s(str(dn), mod_attrs)
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -464,7 +464,7 @@ class LdapBackend(GroupBackend, UserBackend):
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         try:
-            result = self.cnx.search_s(base, scope, filterstr=s_filter)
+            result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
             return len(result) != 0
         except ldap.NO_SUCH_OBJECT as ex:
             return False
