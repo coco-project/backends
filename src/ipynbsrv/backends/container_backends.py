@@ -132,7 +132,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 # TODO: other optional params
                 detach=True
             )
-            return container.get(Docker.IDENTIFIER_KEY)
+            return self.get_container(container.get(Docker.IDENTIFIER_KEY))
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -298,7 +298,6 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 container[ContainerBackend.FIELD_STATUS] = status
             return containers
         except Exception as ex:
-            print ex
             raise ContainerBackendError(ex)
 
     def get_image(self, image, **kwargs):
@@ -875,7 +874,7 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         if status_code == requests.codes.bad_request:              # 400
             raise NotImplementedError
         elif status_code == requests.codes.not_found:              # 404
-            raise ContainerINotFoundError
+            raise ContainerNotFoundError
         elif status_code == requests.codes.method_not_allowed:     # 405
             raise NotImplementedError
         elif status_code == requests.codes.request_timeout:        # 408
