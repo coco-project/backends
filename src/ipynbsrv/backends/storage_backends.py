@@ -25,6 +25,18 @@ class LocalFileSystem(StorageBackend):
         except Exception as ex:
             raise StorageBackendError(ex)
 
+    def get_dir_gid(self, dir_name, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.dir_exists(dir_name):
+            raise DirectoryNotFoundError("Directory does not exist.")
+
+        try:
+            return self._fs.get_gid(dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
+
     def get_dir_group(self, dir_name, **kwargs):
         """
         :inherit.
@@ -58,6 +70,18 @@ class LocalFileSystem(StorageBackend):
 
         try:
             return self._fs.get_owner(dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
+
+    def get_dir_uid(self, dir_name, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.dir_exists(dir_name):
+            raise DirectoryNotFoundError("Directory does not exist.")
+
+        try:
+            return self._fs.get_uid(dir_name)
         except Exception as ex:
             raise StorageBackendError(ex)
 
@@ -101,6 +125,18 @@ class LocalFileSystem(StorageBackend):
         except Exception as ex:
             raise StorageBackendError(ex)
 
+    def set_dir_gid(self, dir_name, gid, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.dir_exists(dir_name):
+            raise DirectoryNotFoundError("Directory does not exist.")
+
+        try:
+            self._fs.set_gid(gid, dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
+
     def set_dir_group(self, dir_name, group, **kwargs):
         """
         :inherit.
@@ -134,5 +170,17 @@ class LocalFileSystem(StorageBackend):
 
         try:
             self._fs.set_owner(owner, dir_name)
+        except Exception as ex:
+            raise StorageBackendError(ex)
+
+    def set_dir_uid(self, dir_name, uid, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.dir_exists(dir_name):
+            raise DirectoryNotFoundError("Directory does not exist.")
+
+        try:
+            self._fs.set_uid(uid, dir_name)
         except Exception as ex:
             raise StorageBackendError(ex)
