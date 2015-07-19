@@ -75,7 +75,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         containers = self.get_containers(only_running=False)
         for container in containers:
             for ct_name in container.get('Names'):
-                if ct_name.replace('/', 00) == name:
+                if ct_name.replace('/', '') == name:
                     return True
 
         return False
@@ -118,7 +118,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         :param kwargs: Optional arguments for docker-py's create_container method.
         """
         self.validate_container_creation_specification(specification)
-        if self.container_exists_by_name(container):
+        if self.container_exists_by_name(specification.get('name')):
             raise ContainerBackendError("A container with that name already exists")
 
         try:
