@@ -64,7 +64,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         :inherit.
         """
         containers = self.get_containers(only_running=False)
-        return next((ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY)), False) is not False
+        return next((ct for ct in containers if ct.get(Docker.IDENTIFIER_KEY).startswith(container)), False) is not False
 
     def container_exists_by_name(self, name):
         """
@@ -108,7 +108,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         snapshots = self.get_container_snapshots(container)
-        return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False) is not False
+        return next((sh for sh in snapshots if sh.get(Docker.IDENTIFIER_KEY).startswith(snapshot)), False) is not False
 
     def create_container(self, specification, **kwargs):
         """
@@ -142,8 +142,8 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        # if self.container_snapshot_exists(container, name):
-        #     raise ContainerBackendError("A snapshot with that name already exists for the given container.")
+        if self.container_snapshot_exists(container, name):
+            raise ContainerBackendError("A snapshot with that name already exists for the given container.")
 
         self.validate_container_snapshot_creation_specification(specification)
         try:
@@ -153,7 +153,8 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
                 repository=container.get('Names')[0].replace('/', ''),
                 tag=Docker.SNAPSHOT_PREFIX + specification.get('name')
             )
-            return snapshot.get(Docker.IDENTIFIER_KEY)
+            snapshot[ContainerBackend.FIELD_PK] = snapshot.get(Docker.IDENTIFIER_KEY)
+            return snapshot
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -224,7 +225,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         containers = self.get_containers(only_running=False)
-        return next(ct for ct in containers if container == ct.get(Docker.IDENTIFIER_KEY))
+        return next(ct for ct in containers if ct.get(Docker.IDENTIFIER_KEY).startswith(container))
 
     def get_container_logs(self, container, **kwargs):
         """
@@ -256,7 +257,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerSnapshotNotFoundError
 
         snapshots = self.get_container_snapshots(container)
-        return next(sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY))
+        return next(sh for sh in snapshots if sh.get(Docker.IDENTIFIER_KEY).startswith(snapshot))
 
     def get_container_snapshots(self, container, **kwargs):
         """
@@ -308,7 +309,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerImageNotFoundError
 
         images = self.get_images()
-        return next(img for img in images if image == img.get(Docker.IDENTIFIER_KEY))
+        return next(img for img in images if img.get(Docker.IDENTIFIER_KEY).startswith(image))
 
     def get_images(self, **kwargs):
         """
@@ -364,7 +365,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         :inherit.
         """
         images = self.get_images()
-        return next((img for img in images if image == img.get(Docker.IDENTIFIER_KEY)), False) is not False
+        return next((img for img in images if img.get(Docker.IDENTIFIER_KEY).startswith(image)), False) is not False
 
     def restart_container(self, container, **kwargs):
         """
