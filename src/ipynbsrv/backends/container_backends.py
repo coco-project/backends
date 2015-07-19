@@ -108,7 +108,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
             raise ContainerNotFoundError
 
         snapshots = self.get_container_snapshots(container)
-        return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False)
+        return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False) is not False
 
     def create_container(self, specification, **kwargs):
         """
@@ -364,7 +364,7 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         :inherit.
         """
         images = self.get_images()
-        return next((img for img in images if image == img.get(Docker.IDENTIFIER_KEY)), False)
+        return next((img for img in images if image == img.get(Docker.IDENTIFIER_KEY)), False) is not False
 
     def restart_container(self, container, **kwargs):
         """
@@ -559,13 +559,8 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         """
         :inherit.
         """
-        try:
-            self.get_container_snapshot(container, snapshot)
-            return True
-        except NotFounderror:
-            return False
-        except Exception as ex:
-            raise ex
+        snapshots = self.get_container_snapshots(container, snapshot)
+        return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False) is not False
 
     def create_container(self, specification, **kwargs):
         """
