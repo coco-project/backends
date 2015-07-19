@@ -2,6 +2,11 @@ from ipynbsrv.contract.backends import GroupBackend, UserBackend
 from ipynbsrv.contract.errors import *
 import ldap
 
+# TODO: delete users from groups on user delete
+# TODO: delete groups from user on group delete
+# TODO: delete private group of user on user delete
+# TODO: renaming users?
+# TODO: delete user when deleted in django
 
 class LdapBackend(GroupBackend, UserBackend):
 
@@ -186,6 +191,7 @@ class LdapBackend(GroupBackend, UserBackend):
         dn = self.get_full_user_dn(user)
         try:
             self.cnx.delete_s(str(dn))
+            self.remove_user_from_all_groups
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -245,8 +251,8 @@ class LdapBackend(GroupBackend, UserBackend):
             raise GroupBackendError("Multiple groups found")
         else:
             group = result[0][1]
-            group[UserBackend.FIELD_ID] = int(group.get('gidNumber')[0])
-            group[UserBackend.FIELD_PK] = group.get('cn')[0]
+            group[GroupBackend.FIELD_ID] = int(group.get('gidNumber')[0])
+            group[GroupBackend.FIELD_PK] = group.get('cn')[0]
             return group
 
     def get_group_members(self, group, **kwargs):
@@ -369,6 +375,14 @@ class LdapBackend(GroupBackend, UserBackend):
             return False
         except Exception as ex:
             raise GroupBackendError(ex)
+
+    def remove_user_from_all_groups(self, user, **kwargs):
+        """
+        :inherit
+        """
+        groups = self.get_groups()
+        for group in groups:
+            remove_group_member(group, user)
 
     def remove_group_member(self, group, user, **kwargs):
         """
