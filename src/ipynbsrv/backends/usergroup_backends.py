@@ -190,8 +190,10 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         try:
+            self.remove_user_from_all_groups(user)
             self.cnx.delete_s(str(dn))
-            self.remove_user_from_all_groups
+        except BackendError as ex:
+            raise ex
         except ldap.NO_SUCH_OBJECT as ex:
             raise UserNotFoundError(ex)
         except Exception as ex:
@@ -271,10 +273,10 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as ex:
             raise GroupBackendError(ex)
 
-        users = []
+        members = []
         for user in result.get('memberUid', []):
-            users += self.get_user(user)
-        return users
+            members.append(self.get_user(user))
+        return members
 
     def get_groups(self, **kwargs):
         """
@@ -376,13 +378,17 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as ex:
             raise GroupBackendError(ex)
 
-    def remove_user_from_all_groups(self, user, **kwargs):
+    def is_group_member(self, group, user, **kwargs):
         """
-        :inherit
+        :inherit.
         """
-        groups = self.get_groups()
-        for group in groups:
-            remove_group_member(group, user)
+        if not self.group_exists(group):
+            raise GroupNotFoundError
+        if not self.user_exists(user):
+            raise UserNotFoundError
+
+        members = self.get_group_members(group)
+        return next((m for m in members if user == m.get(UserBackend.FIELD_PK)), False) is not False
 
     def remove_group_member(self, group, user, **kwargs):
         """
@@ -402,49 +408,18 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as ex:
             raise GroupBackendError(ex)
 
-    def rename_group(self, group, new_name, **kwargs):
+    def remove_user_from_all_groups(self, user, **kwargs):
         """
-        :inherit.
-        """
-        if self.readonly:
-            raise ReadOnlyError
-        if not self.group_exists(group):
-            raise GroupNotFoundError
-
-        dn = self.get_full_group_dn(group)
-        try:
-            # TODO: update memberUid gidNumbers
-            # copy object to new dn and delete old one
-            self.cnx.modrdn_s(str(dn), str("cn=%s" % new_name), delold=1)
-        except ldap.NO_SUCH_OBJECT as ex:
-            raise GroupNotFoundError(ex)
-        except Exception as ex:
-            raise GroupBackendError(ex)
-
-    def rename_user(self, user, new_name, **kwargs):
-        """
-        :inherit.
+        :inherit
         """
         if self.readonly:
             raise ReadOnlyError
         if not self.user_exists(user):
             raise UserNotFoundError
 
-        dn = self.get_full_user_dn(user)
-        mod_attrs = [
-            (ldap.MOD_REPLACE, 'uid', str(new_name)),
-            (ldap.MOD_REPLACE, 'sn', str(new_name))
-        ]
-        try:
-            # TODO: update groups memberUids
-            # first: change name fields
-            self.cnx.modify_s(str(dn), mod_attrs)
-            # then: copy object to new dn and delete old one
-            self.cnx.modrdn_s(str(dn), str("cn=%s" % new_name), delold=1)
-        except ldap.NO_SUCH_OBJECT as ex:
-            raise UserNotFoundError(ex)
-        except Exception as ex:
-            raise UserBackendError(ex)
+        for group in self.get_groups():
+            if self.is_group_member(group.get(GroupBackend.FIELD_PK), user):
+                self.remove_group_member(group.get(GroupBackend.FIELD_PK), user)
 
     def set_user_credential(self, user, credential, **kwargs):
         """
