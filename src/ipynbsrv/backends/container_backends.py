@@ -6,8 +6,7 @@ import requests
 from requests.exceptions import RequestException
 
 
-class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
-             SnapshotableContainerBackend, SuspendableContainerBackend):
+class Docker(CloneableContainerBackend, SnapshotableContainerBackend, SuspendableContainerBackend):
 
     """
     Docker container backend powered by docker-py bindings.
@@ -110,29 +109,26 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         snapshots = self.get_container_snapshots(container)
         return next((sh for sh in snapshots if sh.get(Docker.IDENTIFIER_KEY).startswith(snapshot)), False) is not False
 
-    def create_container(self, specification, **kwargs):
+    def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
         :inherit.
         """
-        self.validate_container_creation_specification(specification)
-        if self.container_exists_by_name(specification.get('name')):
+        if self.container_exists_by_name(name):
             raise ContainerBackendError("A container with that name already exists")
 
-        volumes = specification.get('volumes')
         mount_points = [vol.get('source') for vol in volumes]
         binds = map(lambda bind: "%s:%s" % (bind.get('source'), bind.get('target')), volumes)
         try:
             container = self._client.create_container(
-                image=specification.get('image'),
-                command=specification.get('command'),
-                name=specification.get('name'),
-                ports=kwargs.get('ports'),
+                image=image,
+                command=cmd,
+                name=name,
+                ports=ports,
                 volumes=mount_points,
                 host_config=docker_utils.create_host_config(
                     binds=binds
                 ),
                 environment=kwargs.get('env'),
-                # TODO: other optional params
                 detach=True
             )
             return self.get_container(container.get(Docker.IDENTIFIER_KEY))
@@ -143,7 +139,6 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         """
         :inherit.
         """
-        self.validate_container_snapshot_creation_specification(specification)
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if self.container_snapshot_exists(container, name):
@@ -326,25 +321,6 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_required_container_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('name', basestring),
-            ('image', basestring),
-            ('command', basestring),
-            ('volumes', list)
-        ]
-
-    def get_required_snapshot_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('name', basestring)
-        ]
-
     def get_status(self):
         """
         :inherit.
@@ -455,39 +431,8 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def validate_container_creation_specification(self, specification):
-        """
-        Validate that the specification matches the definition.
 
-        :param specification: The specification to validate.
-        """
-        for rname, rtype in self.get_required_container_creation_fields():
-            field = specification.get(rname)
-            if field is None:
-                raise IllegalContainerSpecificationError("Required field %s missing." % rname)
-            elif not isinstance(field, rtype):
-                raise IllegalContainerSpecificationError("Required field %s of wrong type. %s expected, %s given." % (field, rtype, type(field)))
-
-        return specification
-
-    def validate_container_snapshot_creation_specification(self, specification):
-        """
-        Validate that the specification matches the definition.
-
-        :param specification: The specification to validate.
-        """
-        for rname, rtype in self.get_required_snapshot_creation_fields():
-            field = specification.get(rname)
-            if field is None:
-                raise IllegalContainerSpecificationError("Required field %s missing." % rname)
-            elif not isinstance(field, rtype):
-                raise IllegalContainerSpecificationError("Required field %s of wrong type. %s expected, %s given." % (field, rtype, type(field)))
-
-        return specification
-
-
-class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
-                 SnapshotableContainerBackend, SuspendableContainerBackend):
+class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, SuspendableContainerBackend):
 
     """
     The HTTP remote container backend can be used to communicate with a HTTP remote host API.
@@ -558,10 +503,18 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
         snapshots = self.get_container_snapshots(container, snapshot)
         return next((sh for sh in snapshots if snapshot == sh.get(Docker.IDENTIFIER_KEY)), False) is not False
 
-    def create_container(self, specification, **kwargs):
+    def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
         :inherit.
         """
+        specification = {
+            'name': name,
+            'image': image,
+            'ports': ports,
+            'volumes': volumes,
+            'cmd': cmd
+        }
+        specification.update(kwargs)
         try:
             response = requests.post(
                 url=self.url + self.slugs.get('containers'),
