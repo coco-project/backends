@@ -13,11 +13,6 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
     Docker container backend powered by docker-py bindings.
     """
 
-    """
-    Prefix for created container snapshots.
-    """
-    SNAPSHOT_PREFIX = 'snapshot_'
-
     def __init__(self, version, base_url='unix://var/run/docker.sock'):
         """
         Initialize a new Docker container backend.
@@ -92,8 +87,15 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
-        snapshots = self.get_container_snapshots(container)
-        return next((sh for sh in snapshots if sh.get('Id', "").startswith(snapshot)), False) is not False
+        try:
+            self._client.inspect_image(snapshot)
+            return True
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                return False
+            raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
@@ -121,24 +123,25 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def create_container_snapshot(self, container, specification, **kwargs):
+    def create_container_snapshot(self, container, name, **kwargs):
         """
         :inherit.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if self.container_snapshot_exists(container, name):
-            raise ContainerBackendError("A snapshot with that name already exists for the given container.")
+        # if self.container_snapshot_exists_by_name(name):
+        #     raise ContainerBackendError("A snapshot with that name already exists for the given container.")
 
+        repository, tag = name.split(':')
         try:
-            container = self.get_container(container)
             snapshot = self._client.commit(
                 container=container,
-                repository=container.get('Names')[0].replace('/', ''),
-                tag=Docker.SNAPSHOT_PREFIX + specification.get('name')
+                repository=repository,
+                tag=tag
             )
-            snapshot[ContainerBackend.KEY_PK] = snapshot.get('Id')
-            return snapshot
+            return {
+                ContainerBackend.KEY_PK: snapshot.get('Id')
+            }
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -173,6 +176,10 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         try:
             return self._client.remove_image(snapshot)
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                raise ContainerSnapshotNotFoundError
+            raise ContainerBackendError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -288,8 +295,17 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         if not self.container_snapshot_exists(container, snapshot):
             raise ContainerSnapshotNotFoundError
 
-        snapshots = self.get_container_snapshots(container)
-        return next(sh for sh in snapshots if sh.get('Id').startswith(snapshot))
+        try:
+            snapshot = self._client.inspect_image(snapshot)
+            return {
+                ContainerBackend.KEY_PK: snapshot.get('Id')
+            }
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                raise ContainerSnapshotNotFoundError
+            raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
 
     def get_container_snapshots(self, container, **kwargs):
         """
