@@ -8,7 +8,7 @@ setup(
     package_dir={'': 'src'},
     namespace_packages=['ipynbsrv'],
     install_requires=[
-        'docker-py==1.2.1',
+        'docker-py==1.3.0',
         'ipynbsrv-contract',
         'requests==2.7.0',
         'python-ldap==2.4.19'

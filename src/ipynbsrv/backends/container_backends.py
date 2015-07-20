@@ -1,4 +1,4 @@
-from docker import Client
+from docker import Client, utils as docker_utils
 from ipynbsrv.contract.backends import *
 from ipynbsrv.contract.errors import *
 import json
@@ -113,21 +113,24 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
     def create_container(self, specification, **kwargs):
         """
         :inherit.
-
-        :param specification: A dict with the fields as per get_required_container_creation_fields.
-        :param kwargs: Optional arguments for docker-py's create_container method.
         """
         self.validate_container_creation_specification(specification)
         if self.container_exists_by_name(specification.get('name')):
             raise ContainerBackendError("A container with that name already exists")
 
+        volumes = specification.get('volumes')
+        mount_points = [vol.get('source') for vol in volumes]
+        binds = map(lambda bind: "%s:%s" % (bind.get('source'), bind.get('target')), volumes)
         try:
             container = self._client.create_container(
-                name=specification.get('name'),
                 image=specification.get('image'),
                 command=specification.get('command'),
+                name=specification.get('name'),
                 ports=kwargs.get('ports'),
-                volumes=kwargs.get('volumes'),
+                volumes=mount_points,
+                host_config=docker_utils.create_host_config(
+                    binds=binds
+                ),
                 environment=kwargs.get('env'),
                 # TODO: other optional params
                 detach=True
@@ -140,12 +143,12 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         """
         :inherit.
         """
+        self.validate_container_snapshot_creation_specification(specification)
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if self.container_snapshot_exists(container, name):
             raise ContainerBackendError("A snapshot with that name already exists for the given container.")
 
-        self.validate_container_snapshot_creation_specification(specification)
         try:
             container = self.get_container(container)
             snapshot = self._client.commit(
@@ -330,15 +333,8 @@ class Docker(CloneableContainerBackend, ImageBasedContainerBackend,
         return [
             ('name', basestring),
             ('image', basestring),
-            ('command', basestring)
-        ]
-
-    def get_required_container_start_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('identifier', basestring)
+            ('command', basestring),
+            ('volumes', list)
         ]
 
     def get_required_snapshot_creation_fields(self):
@@ -814,30 +810,6 @@ class HttpRemote(CloneableContainerBackend, ImageBasedContainerBackend,
                 HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ContainerBackendError(ex)
-
-    def get_required_container_creation_fields(self):
-        """
-        :inherit.
-        """
-        raise NotImplementedError
-
-    def get_required_container_start_fields(self):
-        """
-        :inherit.
-        """
-        raise NotImplementedError
-
-    def get_required_image_creation_fields(self):
-        """
-        :inherit.
-        """
-        raise NotImplementedError
-
-    def get_required_snapshot_creation_fields(self):
-        """
-        :inherit.
-        """
-        raise NotImplementedError
 
     def get_status(self):
         """
