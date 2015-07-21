@@ -138,25 +138,31 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def create_container_snapshot(self, container, name, **kwargs):
+    def create_container_image(self, container, name, **kwargs):
         """
         :inherit.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        snapshot_name = self.get_internal_container_snapshot_name(container, name)
-        if self.container_snapshot_exists(snapshot_name):
-            raise ContainerBackendError("A snapshot with that name already exists for the given container")
+        image_name = self.get_internal_container_image_name(container, name)
+        if self.container_image_exists(image_name):
+            raise ContainerBackendError("An image with that name already exists for the given container")
 
         try:
-            snapshot = self._client.commit(
+            image = self._client.commit(
                 container=container,
-                repository=snapshot_name.split(':')[0],
-                tag=snapshot_name.split(':')[1]
+                repository=image_name.split(':')[0],
+                tag=image_name.split(':')[1]
             )
-            return self.get_container_snapshot(snapshot.get('Id'))
+            return self.get_container_image(image.get('Id'))
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+    def create_container_snapshot(self, container, name, **kwargs):
+        """
+        :inherit.
+        """
+        return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + 'name')
 
     def delete_container(self, container, force=False, **kwargs):
         """
@@ -333,12 +339,12 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         return next(sh for sh in self.get_container_snapshots() if sh.get(ContainerBackend.KEY_PK).startswith(snapshot))
 
-    def get_internal_container_snapshot_name(self, container, name):
+    def get_internal_container_image_name(self, container, name):
         """
-        Return the name how the snapshot with name `name` for the given container is named internally.
+        Return the name how the image with name `name` for the given container is named internally.
 
         :param container: The container the snapshot belongs to.
-        :param name: The snapshot's name.
+        :param name: The image's name.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
@@ -349,9 +355,8 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             return re.sub(
                 # i.e. ipynbsrv-u2500-ipython
                 r'^/' + self.CONTAINER_NAME_PREFIX + r'u(\d+)-(.+)$',
-                # i.e. ipynbsrv-u2500/ipython:snapshot-working
-                self.CONTAINER_NAME_PREFIX + r'u\g<1>' + '/' + r'\g<2>' +
-                ':' + self.CONTAINER_SNAPSHOT_NAME_PREFIX + name,
+                # i.e. ipynbsrv-u2500/ipython:shared-name
+                self.CONTAINER_NAME_PREFIX + r'u\g<1>' + '/' + r'\g<2>' + ':' + name,
                 container_name
             )
         except DockerError as ex:
@@ -448,9 +453,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         :param snapshot: The snapshot to make conform.
         """
-        return {
-            ContainerBackend.KEY_PK: snapshot.get('Id')
-        }
+        return self.make_image_contract_conform(snapshot)
 
     def restart_container(self, container, **kwargs):
         """
@@ -718,7 +721,7 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         else:
             raise ContainerBackendError
 
-    def delete_container(self, container, **kwargs):
+    def delete_container(self, container, force=False, **kwargs):
         """
         :inherit.
         """
@@ -737,7 +740,7 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         else:
             raise ContainerBackendError
 
-    def delete_container_image(self, image, **kwargs):
+    def delete_container_image(self, image, force=False, **kwargs):
         """
         :inherit.
         """
@@ -756,7 +759,7 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         else:
             raise ContainerBackendError
 
-    def delete_container_snapshot(self, snapshot, **kwargs):
+    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
         """
         :inherit.
         """
