@@ -138,9 +138,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
                 repository=repository,
                 tag=tag
             )
-            return {
-                ContainerBackend.KEY_PK: snapshot.get('Id')
-            }
+            return self.get_container_snapshot(snapshot.get('Id'))
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -290,15 +288,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         if not self.container_snapshot_exists(snapshot):
             raise ContainerSnapshotNotFoundError
 
-        try:
-            snapshot = self._client.inspect_image(snapshot)
-            return self.make_snapshot_contract_conform(snapshot)
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                raise ContainerSnapshotNotFoundError
-            raise ContainerBackendError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
+        return next(sh for sh in self.get_container_snapshots() if sh.get(ContainerBackend.KEY_PK).startswith(snapshot))
 
     def get_container_snapshots(self, **kwargs):
         """
@@ -327,7 +317,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
     def get_containers_snapshots(self, container, **kwargs):
         """
-        TODO: implement
+        TODO: implement.
         """
         raise NotImplementedError
 
@@ -377,7 +367,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         try:
             image = self._client.inspect_image(image)
-            if kwargs.get('strict', False):
+            if kwargs.get('strict', True):
                 return not self.is_container_snapshot(image)
             return True
         except DockerError as ex:
@@ -395,9 +385,9 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         :return bool `True` is the image is a container snapshot.
         """
-        parts = image.get('RepoTags')[0].split(':')
+        parts = image.get('RepoTags', [''])[0].split(':')
         if len(parts) > 1:
-            return parts[1].startswith('snapshot-')
+            return parts[1].startswith('snapshot_')
         return False
 
     def make_container_contract_conform(self, container):
