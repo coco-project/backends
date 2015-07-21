@@ -85,7 +85,9 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         :inherit.
         """
         try:
-            self._client.inspect_image(snapshot)
+            image = self._client.inspect_image(snapshot)
+            if kwargs.get('strict', False):
+                return not self.is_container_snapshot(image)
             return True
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
@@ -306,7 +308,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             snapshots = []
             for image in self._client.images():
                 if self.is_container_snapshot(image):
-                    snapshots.append(self.make_snapshot_contract_conform(snapshot))
+                    snapshots.append(self.make_snapshot_contract_conform(image))
             return snapshots
         except Exception as ex:
             raise ContainerBackendError(ex)
@@ -353,7 +355,8 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         try:
             images = []
             for image in self._client.images():
-                images.append(self.make_image_contract_conform(image))
+                if not self.is_container_snapshot(image):
+                    images.append(self.make_image_contract_conform(image))
             return images
         except Exception as ex:
             raise ContainerBackendError(ex)
@@ -373,7 +376,9 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         :inherit.
         """
         try:
-            self._client.inspect_image(image)
+            image = self._client.inspect_image(image)
+            if kwargs.get('strict', False):
+                return not self.is_container_snapshot(image)
             return True
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
@@ -382,7 +387,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def is_container_snapshot(image):
+    def is_container_snapshot(self, image):
         """
         Return `True` if the image is one used to represent a snapshot.
 
@@ -390,8 +395,8 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         :return bool `True` is the image is a container snapshot.
         """
-        parts = image.get('RepoTags')[0].split('/')
-        if len(parts) != 0:
+        parts = image.get('RepoTags')[0].split(':')
+        if len(parts) > 1:
             return parts[1].startswith('snapshot-')
         return False
 
@@ -432,7 +437,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         return {
             ContainerBackend.KEY_PK: snapshot.get('Id'),
-            SnapshotableContainerBackend.SNAPSHOT_KEY_NAME: snapshot.get('Name')
+            SnapshotableContainerBackend.SNAPSHOT_KEY_NAME: snapshot.get('RepoTags')[0]
         }
 
     def restart_container(self, container, **kwargs):
