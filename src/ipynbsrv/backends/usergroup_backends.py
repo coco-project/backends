@@ -84,8 +84,6 @@ class LdapBackend(GroupBackend, UserBackend):
         else:
             username = dn
 
-        print(self.server)
-
         try:
             self.cnx = ldap.initialize(self.server)
             self.cnx.bind_s(str(username), str(credentials.get('password')))
@@ -190,12 +188,9 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.user_exists(user):
             raise UserNotFoundError
 
-        dn = self.get_full_user_dn(str(user))
+        dn = self.get_full_user_dn(user)
         try:
-            self.remove_user_from_all_groups(str(user))
-        except:
-            pass
-        try:
+            self.remove_user_from_all_groups(user)
             self.cnx.delete_s(str(dn))
         except BackendError as ex:
             raise ex
@@ -420,7 +415,7 @@ class LdapBackend(GroupBackend, UserBackend):
         if self.readonly:
             raise ReadOnlyError
         if not self.user_exists(user):
-            raise UserNotFoundError(user)
+            raise UserNotFoundError
 
         for group in self.get_groups():
             if self.is_group_member(group.get(GroupBackend.FIELD_PK), user):
