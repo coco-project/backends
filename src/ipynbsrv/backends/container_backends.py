@@ -59,6 +59,20 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
+    def container_image_exists(self, image, **kwargs):
+        """
+        :inherit.
+        """
+        try:
+            image = self._client.inspect_image(image)
+            return True
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                return False
+            raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
     def container_is_running(self, container, **kwargs):
         """
         :inherit.
@@ -95,7 +109,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         :inherit.
         """
-        return self.image_exists(snapshot, **kwargs)
+        return self.container_image_exists(snapshot, **kwargs)
 
     def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
@@ -164,24 +178,11 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
+    def delete_container_image(self, image, force=False, **kwargs):
         """
         :inherit.
         """
-        try:
-            self.delete_image(snapshot, force, **kwargs)
-        except ContainerImageNotFoundError as ex:
-            raise ContainerSnapshotNotFoundError
-        except ContainerBackendError as ex:
-            raise ex
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
-    def delete_image(self, image, force=False, **kwargs):
-        """
-        :inherit.
-        """
-        if not self.image_exists(image):
+        if not self.container_image_exists(image):
             raise ContainerImageNotFoundError
 
         try:
@@ -190,6 +191,19 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
             raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
+        """
+        :inherit.
+        """
+        try:
+            self.delete_container_image(snapshot, force, **kwargs)
+        except ContainerImageNotFoundError as ex:
+            raise ContainerSnapshotNotFoundError
+        except ContainerBackendError as ex:
+            raise ex
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -226,6 +240,36 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerNotFoundError
             raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+    def get_container_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
+        if not self.container_image_exists(image):
+            raise ContainerImageNotFoundError
+
+        try:
+            image = self._client.inspect_image(image)
+            return self.make_image_contract_conform(image)
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                raise ContainerImageNotFoundError
+            raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+    def get_container_images(self, **kwargs):
+        """
+        :inherit.
+        """
+        try:
+            images = []
+            for image in self._client.images():
+                if not self.is_container_snapshot(image):
+                    images.append(self.make_image_contract_conform(image))
+            return images
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -348,36 +392,6 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         raise NotImplementedError
 
-    def get_image(self, image, **kwargs):
-        """
-        :inherit.
-        """
-        if not self.image_exists(image):
-            raise ContainerImageNotFoundError
-
-        try:
-            image = self._client.inspect_image(image)
-            return self.make_image_contract_conform(image)
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                raise ContainerImageNotFoundError
-            raise ContainerBackendError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
-    def get_images(self, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            images = []
-            for image in self._client.images():
-                if not self.is_container_snapshot(image):
-                    images.append(self.make_image_contract_conform(image))
-            return images
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
     def get_status(self):
         """
         :inherit.
@@ -387,20 +401,6 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             return ContainerBackend.BACKEND_STATUS_OK
         except Exception:
             return ContainerBackend.BACKEND_STATUS_ERROR
-
-    def image_exists(self, image, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            image = self._client.inspect_image(image)
-            return True
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                return False
-            raise ContainerBackendError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
 
     def is_container_snapshot(self, image):
         """
@@ -608,7 +608,19 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         try:
             self.get_container(container)
             return True
-        except NotFounderror:
+        except ContainerNotFoundError:
+            return False
+        except Exception as ex:
+            raise ex
+
+    def container_image_exists(self, image):
+        """
+        :inherit.
+        """
+        try:
+            self.get_container_image(image)
+            return True
+        except ContainerImageNotFoundError:
             return False
         except Exception as ex:
             raise ex
@@ -646,24 +658,47 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
             'cmd': cmd
         }
         specification.update(kwargs)
+        response = None
         try:
             response = requests.post(
                 url=self.url + self.slugs.get('containers'),
                 data=json.dumps(specification)
             )
-            if response.status_code == requests.codes.created:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
+        if response.status_code == requests.codes.created:
+            return response.json()
+        else:
+            raise ContainerBackendError
+
+    def create_container_image(self, specification, **kwargs):
+        """
+        :inherit.
+        """
+        response = None
+        try:
+            response = requests.post(
+                url=self.url + self.slugs.get('images'),
+                data=json.dumps(specification)
+            )
+        except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.created:
+            return response.json()
+        else:
+            raise ContainerBackendError
+
     def create_container_snapshot(self, container, name, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_snapshots_url(container),
@@ -671,82 +706,80 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
                     'name': name
                 })
             )
-            if response.status_code == requests.codes.created:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def create_image(self, specification, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            response = requests.post(
-                url=self.url + self.slugs.get('images'),
-                data=json.dumps(specification)
-            )
-            if response.status_code == requests.codes.created:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
-        except RequestException as ex:
-            raise ConnectionError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
+        if response.status_code == requests.codes.created:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        else:
+            raise ContainerBackendError
 
     def delete_container(self, container, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.delete(url=self.generate_container_url(container))
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        else:
+            raise ContainerBackendError
+
+    def delete_container_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
+        response = None
+        try:
+            response = requests.delete(url=self.generate_image_url(image))
+        except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerImageNotFoundError
+        else:
+            raise ContainerBackendError
 
     def delete_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.delete(url=self.generate_snapshot_url(snapshot))
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_image(self, image, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            response = requests.delete(url=self.generate_image_url(image))
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
-        except RequestException as ex:
-            raise ConnectionError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerSnapshotNotFoundError
+        else:
+            raise ContainerBackendError
 
     def exec_in_container(self, container, cmd, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/exec',
@@ -754,14 +787,19 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
                     'command': cmd
                 })
             )
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif response.status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
 
     def generate_container_url(self, container):
         """
@@ -799,186 +837,186 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.generate_container_url(container))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        else:
+            raise ContainerBackendError
+
+    def get_container_image(self, image, **kwargs):
+        """
+        :inherit.
+        """
+        response = None
+        try:
+            response = requests.get(url=self.generate_image_url(image))
+        except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerImageNotFoundError
+        else:
+            raise ContainerBackendError
+
+    def get_container_images(self, image, **kwargs):
+        """
+        :inherit.
+        """
+        response = None
+        try:
+            response = requests.get(url=self.url + self.slugs.get('images'))
+        except RequestException as ex:
+            raise ConnectionError(ex)
+        except Excpetion as ex:
+            raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        else:
+            raise ContainerBackendError
 
     def get_container_logs(self, container, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.generate_container_url(container) + '/logs')
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        else:
+            raise ContainerBackendError
 
     def get_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.generate_snapshot_url(snapshot))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerSnapshotNotFoundError
+        else:
+            raise ContainerBackendError
 
     def get_container_snapshots(self, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.url + self.slugs.get('snapshots'))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        else:
+            raise ContainerBackendError
 
     def get_containers_snapshots(self, container, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.generate_container_snapshots_url(container))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
+            raise ConnectionError(ex)
+        except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        else:
+            raise ContainerBackendError
 
     def get_containers(self, only_running=False, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.url + self.slugs.get('containers'))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_image(self, image, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            response = requests.get(url=self.generate_image_url(image))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
-        except RequestException as ex:
-            raise ConnectionError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
-    def get_images(self, image, **kwargs):
-        """
-        :inherit.
-        """
-        try:
-            response = requests.get(url=self.url + self.slugs.get('images'))
-            if response.status_code == requests.codes.ok:
-                return response.json()
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
-        except RequestException as ex:
-            raise ContainerBackendError(ex)
+        if response.status_code == requests.codes.ok:
+            return response.json()
+        else:
+            raise ContainerBackendError
 
     def get_status(self):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.get(url=self.url + '/health')
-            if response.status_code == requests.codes.ok:
-                return response.json().get('backends').get('container').get('status')
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def image_exists(self, image):
-        """
-        :inherit.
-        """
-        try:
-            self.get_image(image)
-            return True
-        except NotFoundError:
-            return False
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
-    @staticmethod
-    def raise_status_code_error(status_code):
-        """
-        TODO: write doc.
-        """
-        if status_code == requests.codes.bad_request:              # 400
-            raise NotImplementedError
-        elif status_code == requests.codes.not_found:              # 404
-            raise ContainerNotFoundError
-        elif status_code == requests.codes.method_not_allowed:     # 405
-            raise NotImplementedError
-        elif status_code == requests.codes.request_timeout:        # 408
-            raise NotImplementedError
-        elif status_code == requests.codes.precondition_failed:    # 412
-            raise IllegalContainerStateError
-        elif status_code == requests.codes.unprocessable_entity:   # 422
-            raise NotImplementedError
-        elif status_code == requests.codes.precondition_required:  # 428
-            raise NotImplementedError
-        elif status_code == requests.codes.internal_server_error:  # 500
-            raise NotImplementedError
-        elif status_code == requests.codes.not_implemented:        # 501
-            raise NotImplementedError
+        if response.status_code == requests.codes.ok:
+            return response.json().get('backends').get('container').get('status')
         else:
-            raise NotImplementedError
+            raise ContainerBackendError
 
     def restart_container(self, container, **kwargs):
         """
         :inherit.
         """
+        respone = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/restart',
                 data=json.dumps({})
             )
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
 
     def restore_container_snapshot(self, container, snapshot, **kwargs):
         """
@@ -990,70 +1028,94 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/resume',
                 data=json.dumps({})
             )
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
 
     def start_container(self, container):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/start',
                 data=json.dumps({})
             )
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
 
     def stop_container(self, container, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/stop',
                 data=json.dumps({})
             )
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
 
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
+
     def suspend_container(self, container, **kwargs):
         """
         :inherit.
         """
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/suspend',
                 data=json.dumps({})
             )
-            if response.status_code == requests.codes.no_content:
-                return True
-            else:
-                HttpRemote.raise_status_code_error(response.status_code)
         except RequestException as ex:
             raise ConnectionError(ex)
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if response.status_code == requests.codes.no_content:
+            return True
+        elif status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
+        elif status_code == requests.codes.precondition_required:
+            raise IllegalContainerStateError
+        else:
+            raise ContainerBackendError
