@@ -3,6 +3,7 @@ from docker.errors import APIError as DockerError
 from ipynbsrv.contract.backends import *
 from ipynbsrv.contract.errors import *
 import json
+import re
 import requests
 from requests.exceptions import RequestException
 
@@ -12,6 +13,16 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
     """
     Docker container backend powered by docker-py bindings.
     """
+
+    """
+    The prefix that is prepended to the name of created containers.
+    """
+    CONTAINER_NAME_PREFIX = 'ipynbsrv-'
+
+    """
+    The prefix that is prepended to the name of created container snapshots.
+    """
+    CONTAINER_SNAPSHOT_NAME_PREFIX = 'snapshot-'
 
     def __init__(self, version, base_url='unix://var/run/docker.sock'):
         """
@@ -84,22 +95,13 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         :inherit.
         """
-        try:
-            image = self._client.inspect_image(snapshot)
-            if kwargs.get('strict', False):
-                return not self.is_container_snapshot(image)
-            return True
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                return False
-            raise ContainerBackendError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
+        return self.image_exists(snapshot, **kwargs)
 
     def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
         :inherit.
         """
+        name = self.CONTAINER_NAME_PREFIX + name
         if self.container_exists(name):
             raise ContainerBackendError("A container with that name already exists")
 
@@ -128,15 +130,15 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        # if self.container_snapshot_exists_by_name(name):
-        #     raise ContainerBackendError("A snapshot with that name already exists for the given container.")
+        snapshot_name = self.get_internal_container_snapshot_name(container, name)
+        if self.container_snapshot_exists(snapshot_name):
+            raise ContainerBackendError("A snapshot with that name already exists for the given container")
 
-        repository, tag = name.split(':')
         try:
             snapshot = self._client.commit(
                 container=container,
-                repository=repository,
-                tag=tag
+                repository=snapshot_name.split(':')[0],
+                tag=snapshot_name.split(':')[1]
             )
             return self.get_container_snapshot(snapshot.get('Id'))
         except Exception as ex:
@@ -166,15 +168,12 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         :inherit.
         """
-        if not self.container_snapshot_exists(snapshot):
-            raise ContainerSnapshotNotFoundError
-
         try:
-            return self._client.remove_image(snapshot)
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                raise ContainerSnapshotNotFoundError
-            raise ContainerBackendError(ex)
+            self.delete_image(snapshot, force, **kwargs)
+        except ContainerImageNotFoundError as ex:
+            raise ContainerSnapshotNotFoundError
+        except ContainerBackendError as ex:
+            raise ex
         except Exception as ex:
             raise ContainerBackendError(ex)
 
@@ -290,6 +289,34 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
         return next(sh for sh in self.get_container_snapshots() if sh.get(ContainerBackend.KEY_PK).startswith(snapshot))
 
+    def get_internal_container_snapshot_name(self, container, name):
+        """
+        Return the name how the snapshot with name `name` for the given container is named internally.
+
+        :param container: The container the snapshot belongs to.
+        :param name: The snapshot's name.
+        """
+        if not self.container_exists(container):
+            raise ContainerNotFoundError
+
+        try:
+            container = self._client.inspect_container(container)
+            container_name = container.get('Name')
+            return re.sub(
+                # i.e. ipynbsrv-u2500-ipython
+                r'^/' + self.CONTAINER_NAME_PREFIX + r'u(\d+)-(.+)$',
+                # i.e. ipynbsrv-u2500/ipython:snapshot-working
+                self.CONTAINER_NAME_PREFIX + r'u\g<1>' + '/' + r'\g<2>' +
+                ':' + self.CONTAINER_SNAPSHOT_NAME_PREFIX + name,
+                container_name
+            )
+        except DockerError as ex:
+            if ex.response.status_code == requests.codes.not_found:
+                raise ContainerNotFoundError
+            raise ContainerBackendError(ex)
+        except Exception as ex:
+            raise ContainerBackendError(ex)
+
     def get_container_snapshots(self, **kwargs):
         """
         :inherit.
@@ -367,8 +394,6 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         try:
             image = self._client.inspect_image(image)
-            if kwargs.get('strict', True):
-                return not self.is_container_snapshot(image)
             return True
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
@@ -379,15 +404,13 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
 
     def is_container_snapshot(self, image):
         """
-        Return `True` if the image is one used to represent a snapshot.
+        Return true if `image` is internally used as a container snapshot.
 
         :param image: The image to check.
-
-        :return bool `True` is the image is a container snapshot.
         """
-        parts = image.get('RepoTags', [''])[0].split(':')
+        parts = image.get('RepoTags', [' : '])[0].split(':')
         if len(parts) > 1:
-            return parts[1].startswith('snapshot_')
+            return parts[1].startswith(self.CONTAINER_SNAPSHOT_NAME_PREFIX)
         return False
 
     def make_container_contract_conform(self, container):
@@ -426,8 +449,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         :param snapshot: The snapshot to make conform.
         """
         return {
-            ContainerBackend.KEY_PK: snapshot.get('Id'),
-            SnapshotableContainerBackend.SNAPSHOT_KEY_NAME: snapshot.get('RepoTags')[0]
+            ContainerBackend.KEY_PK: snapshot.get('Id')
         }
 
     def restart_container(self, container, **kwargs):
