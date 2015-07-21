@@ -80,13 +80,10 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def container_snapshot_exists(self, container, snapshot, **kwargs):
+    def container_snapshot_exists(self, snapshot, **kwargs):
         """
         :inherit.
         """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-
         try:
             self._client.inspect_image(snapshot)
             return True
@@ -165,13 +162,11 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_container_snapshot(self, container, snapshot, force=False, **kwargs):
+    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
         """
         :inherit.
         """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-        if not self.container_snapshot_exists(container, snapshot):
+        if not self.container_snapshot_exists(snapshot):
             raise ContainerSnapshotNotFoundError
 
         try:
@@ -286,20 +281,16 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_container_snapshot(self, container, snapshot, **kwargs):
+    def get_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-        if not self.container_snapshot_exists(container, snapshot):
+        if not self.container_snapshot_exists(snapshot):
             raise ContainerSnapshotNotFoundError
 
         try:
             snapshot = self._client.inspect_image(snapshot)
-            return {
-                ContainerBackend.KEY_PK: snapshot.get('Id')
-            }
+            return self.make_snapshot_contract_conform(snapshot)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerSnapshotNotFoundError
@@ -307,27 +298,17 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_container_snapshots(self, container, **kwargs):
+    def get_container_snapshots(self, **kwargs):
         """
         :inherit.
         """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-
         try:
-            container_name = self._client.inspect_container(container).get('Names')[0].replace('/', '')
             snapshots = []
-            for snapshot in self._client.images():
-                for repotag in snapshot.get('RepoTags'):
-                    if repotag.startswith('%s:%s' % (container_name, self.SNAPSHOT_PREFIX)):
-                        snapshot[ContainerBackend.KEY_PK] = snapshot.get('Id')
-                        snapshots.append(snapshot)
+            for image in self._client.images():
+                if self.is_container_snapshot(image):
+                    snapshots.append(self.make_snapshot_contract_conform(snapshot))
             return snapshots
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                raise ContainerImageNotFoundError
-            raise ContainerBackendError(ex)
-        except:
+        except Exception as ex:
             raise ContainerBackendError(ex)
 
     def get_containers(self, only_running=False, **kwargs):
@@ -341,6 +322,12 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             return containers
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+    def get_containers_snapshots(self, container, **kwargs):
+        """
+        TODO: implement
+        """
+        raise NotImplementedError
 
     def get_image(self, image, **kwargs):
         """
@@ -395,6 +382,19 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         except Exception as ex:
             raise ContainerBackendError(ex)
 
+    def is_container_snapshot(image):
+        """
+        Return `True` if the image is one used to represent a snapshot.
+
+        :param image: The image to check.
+
+        :return bool `True` is the image is a container snapshot.
+        """
+        parts = image.get('RepoTags')[0].split('/')
+        if len(parts) != 0:
+            return parts[1].startswith('snapshot-')
+        return False
+
     def make_container_contract_conform(self, container):
         """
         Ensure the container dict returned from Docker is confirm with that the contract requires.
@@ -422,6 +422,17 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         return {
             ContainerBackend.KEY_PK: image.get('Id')
+        }
+
+    def make_snapshot_contract_conform(self, snapshot):
+        """
+        Ensure the snapshot dict returned from Docker is confirm with that the contract requires.
+
+        :param snapshot: The snapshot to make conform.
+        """
+        return {
+            ContainerBackend.KEY_PK: snapshot.get('Id'),
+            SnapshotableContainerBackend.SNAPSHOT_KEY_NAME: snapshot.get('Name')
         }
 
     def restart_container(self, container, **kwargs):
@@ -562,7 +573,8 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         self.url = url
         self.slugs = {
             'containers': '/containers',
-            'snapshots': '/containers/<container>/snapshots',
+            'container_snapshots': '/containers/<container>/snapshots',
+            'snapshots': '/containers/snapshots',
             'images': '/containers/images'
         }
 
@@ -598,12 +610,12 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         container = self.get_container(container)
         return container.get(ContainerBackend.KEY_STATUS) == SuspendableContainerBackend.CONTAINER_STATUS_SUSPENDED
 
-    def container_snapshot_exists(self, container, snapshot, **kwargs):
+    def container_snapshot_exists(self, snapshot, **kwargs):
         """
         :inherit.
         """
-        snapshots = self.get_container_snapshots(container, snapshot)
-        return next((sh for sh in snapshots if snapshot == sh.get(self.KEY_IDENTIFIER)), False) is not False
+        snapshots = self.get_container_snapshots()
+        return next((sh for sh in snapshots if snapshot == sh.get(ContainerBackend.KEY_PK)), False) is not False
 
     def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
         """
@@ -631,14 +643,16 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def create_container_snapshot(self, container, specification, **kwargs):
+    def create_container_snapshot(self, container, name, **kwargs):
         """
         :inherit.
         """
         try:
             response = requests.post(
                 url=self.generate_container_snapshots_url(container),
-                data=json.dumps(specification)
+                data=json.dumps({
+                    'name': name
+                })
             )
             if response.status_code == requests.codes.created:
                 return response.json()
@@ -682,12 +696,12 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_container_snapshot(self, container, snapshot, **kwargs):
+    def delete_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
         try:
-            response = requests.delete(url=self.generate_container_snapshot_url(container, snapshot))
+            response = requests.delete(url=self.generate_snapshot_url(snapshot))
             if response.status_code == requests.codes.no_content:
                 return True
             else:
@@ -740,22 +754,13 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         """
         return self.url + self.slugs.get('containers') + '/' + container
 
-    def generate_container_snapshot_url(self, container, snapshot):
-        """
-        Generate the full URL with which the container's snapshot resource can be accessed on the remote API.
-
-        :param container: The container identifier to generate the snapshot URL for.
-        :param snapshot: The snapshot identifier to generate the snapshot URL for.
-        """
-        return self.url + self.slugs.get('snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container) + '/' + snapshot
-
     def generate_container_snapshots_url(self, container):
         """
         Generate the full URL with which the container's snapshot resource can be accessed on the remote API.
 
-        :param container: The container identifier to generate the snapshots URL for.
+        :param container: The container identifier to generate the snapshot URL for.
         """
-        return self.url + self.slugs.get('snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container)
+        return self.url + self.slugs.get('container_snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container)
 
     def generate_image_url(self, image):
         """
@@ -764,6 +769,14 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         :param image: The image identifier to generate the URL for.
         """
         return self.url + self.slugs.get('images') + '/' + image
+
+    def generate_snapshot_url(self, snapshot):
+        """
+        Generate the full URL with which the snapshot resource can be accessed on the remote API.
+
+        :param snapshot: The snapshot identifier to generate the URL for.
+        """
+        return self.url + self.slugs.get('snapshots') + '/' + snapshot
 
     def get_container(self, container, **kwargs):
         """
@@ -795,12 +808,12 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_container_snapshot(self, container, snapshot, **kwargs):
+    def get_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
         try:
-            response = requests.get(url=self.generate_container_snapshot_url(container, snapshot))
+            response = requests.get(url=self.generate_snapshot_url(snapshot))
             if response.status_code == requests.codes.ok:
                 return response.json()
             else:
@@ -810,7 +823,20 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_container_snapshots(self, container, **kwargs):
+    def get_container_snapshots(self, **kwargs):
+        """
+        :inherit.
+        """
+        try:
+            response = requests.get(url=self.url + self.slugs.get('snapshots'))
+            if response.status_code == requests.codes.ok:
+                return response.json()
+            else:
+                HttpRemote.raise_status_code_error(response.status_code)
+        except RequestException as ex:
+            raise ContainerBackendError(ex)
+
+    def get_containers_snapshots(self, container, **kwargs):
         """
         :inherit.
         """
