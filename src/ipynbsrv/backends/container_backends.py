@@ -6,9 +6,10 @@ import json
 import re
 import requests
 from requests.exceptions import RequestException
+import time
 
 
-class Docker(CloneableContainerBackend, SnapshotableContainerBackend, SuspendableContainerBackend):
+class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
     """
     Docker container backend powered by docker-py bindings.
@@ -35,15 +36,6 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             self._client = Client(base_url=base_url, version=version)
         except Exception as ex:
             raise ConnectionError(ex)
-
-    def clone_container(self, container, clone, **kwargs):
-        """
-        :inherit.
-        """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-
-        raise NotImplementedError
 
     def container_exists(self, container, **kwargs):
         """
@@ -111,19 +103,29 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
         """
         return self.container_image_exists(snapshot, **kwargs)
 
-    def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
+    def create_container(self, name, ports, volumes, cmd=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
         name = self.CONTAINER_NAME_PREFIX + name
         if self.container_exists(name):
             raise ContainerBackendError("A container with that name already exists")
+        if clone_of is not None and not self.container_exists(clone_of):
+            raise ContainerNotFoundError("Base container for the clone does not exist")
 
+        if clone_of is None:
+            image_pk = image
+        else:
+            # TODO: some way to ensure no regular image is created with that name
+            image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + int(time.time()))
+            image_pk = image.get(ContainerBackend.KEY_PK)
         mount_points = [vol.get('source') for vol in volumes]
         binds = map(lambda bind: "%s:%s" % (bind.get('source'), bind.get('target')), volumes)
+
+        container = None
         try:
             container = self._client.create_container(
-                image=image,
+                image=image_pk,
                 command=cmd,
                 name=name,
                 ports=ports,
@@ -134,9 +136,18 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
                 environment=kwargs.get('env'),
                 detach=True
             )
-            return self.get_container(container.get('Id'))
+            container = self.get_container(container.get('Id'))
         except Exception as ex:
             raise ContainerBackendError(ex)
+
+        if clone_of is None:
+            ret = container
+        else:
+            ret = {
+                ContainerBackend.CONTAINER_KEY_CLONE_CONTAINER: container,
+                ContainerBackend.CONTAINER_KEY_CLONE_IMAGE: image
+            }
+        return ret
 
     def create_container_image(self, container, name, **kwargs):
         """
@@ -565,7 +576,7 @@ class Docker(CloneableContainerBackend, SnapshotableContainerBackend, Suspendabl
             raise ContainerBackendError(ex)
 
 
-class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, SuspendableContainerBackend):
+class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
     """
     The HTTP remote container backend can be used to communicate with a HTTP remote host API.
@@ -597,12 +608,6 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
             'snapshots': '/containers/snapshots',
             'images': '/containers/images'
         }
-
-    def clone_container(self, container, **kwargs):
-        """
-        :inherit.
-        """
-        raise NotImplementedError
 
     def container_exists(self, container, **kwargs):
         """
@@ -649,16 +654,17 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         snapshots = self.get_container_snapshots()
         return next((sh for sh in snapshots if snapshot == sh.get(ContainerBackend.KEY_PK)), False) is not False
 
-    def create_container(self, name, image, ports, volumes, cmd=None, **kwargs):
+    def create_container(self, name, ports, volumes, cmd=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
         specification = {
             'name': name,
-            'image': image,
             'ports': ports,
             'volumes': volumes,
-            'cmd': cmd
+            'cmd': cmd,
+            'image': image,
+            'clone_of': clone_of
         }
         specification.update(kwargs)
         response = None
