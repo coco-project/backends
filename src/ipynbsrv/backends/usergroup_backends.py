@@ -448,7 +448,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         base = self.get_full_dn(self.users_dn)
         scope = ldap.SCOPE_SUBTREE
-        s_filter = 'cn=' + str(user)
+        s_filter = 'cn=' + user
         try:
             result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
             return len(result) != 0

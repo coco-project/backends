@@ -633,14 +633,14 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         :inherit.
         """
         container = self.get_container(container)
-        return container.get(ContainerBackend.KEY_STATUS) == ContainerBackend.CONTAINER_STATUS_RUNNING
+        return container.get(ContainerBackend.CONTAINER_KEY_STATUS) == ContainerBackend.CONTAINER_STATUS_RUNNING
 
     def container_is_suspended(self, container, **kwargs):
         """
         :inherit.
         """
         container = self.get_container(container)
-        return container.get(ContainerBackend.KEY_STATUS) == SuspendableContainerBackend.CONTAINER_STATUS_SUSPENDED
+        return container.get(ContainerBackend.CONTAINER_KEY_STATUS) == SuspendableContainerBackend.CONTAINER_STATUS_SUSPENDED
 
     def container_snapshot_exists(self, snapshot, **kwargs):
         """
@@ -1001,7 +1001,7 @@ class HttpRemote(CloneableContainerBackend, SnapshotableContainerBackend, Suspen
         """
         :inherit.
         """
-        respone = None
+        response = None
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/restart',
