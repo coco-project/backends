@@ -327,6 +327,7 @@ class LdapBackend(GroupBackend, UserBackend):
         scope = ldap.SCOPE_SUBTREE
         s_filter = 'cn=' + user
         result = None
+
         try:
             result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
         except ldap.NO_SUCH_OBJECT as ex:
@@ -336,9 +337,9 @@ class LdapBackend(GroupBackend, UserBackend):
 
         matches = len(result)
         if matches == 0:
-            raise UserNotFoundError
+            raise UserNotFoundError("No matching users found.")
         elif matches != 1:
-            raise UserBackendError("Multiple users found")
+            raise UserBackendError("Multiple users found.")
         else:
             user = result[0][1]
             user[UserBackend.FIELD_ID] = int(user.get('uidNumber')[0])
@@ -447,7 +448,7 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         base = self.get_full_dn(self.users_dn)
         scope = ldap.SCOPE_SUBTREE
-        s_filter = 'cn=' + user
+        s_filter = 'cn=' + str(user)
         try:
             result = self.cnx.search_s(str(base), scope, filterstr=str(s_filter))
             return len(result) != 0
