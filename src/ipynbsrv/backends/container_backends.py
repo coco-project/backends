@@ -117,7 +117,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             image_pk = image
         else:
             # TODO: some way to ensure no regular image is created with that name
-            image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + int(time.time()))
+            image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())))
             image_pk = image.get(ContainerBackend.KEY_PK)
         mount_points = [vol.get('source') for vol in volumes]
         binds = map(lambda bind: "%s:%s" % (bind.get('source'), bind.get('target')), volumes)
