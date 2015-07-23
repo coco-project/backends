@@ -21,7 +21,13 @@ class LdapBackend(GroupBackend, UserBackend):
 
     def __init__(self, server, base_dn, users_dn=None, groups_dn=None, readonly=False):
         """
+        Initialize a new LDAP backend.
 
+        :param server: The LDAP server's address.
+        :param base_dn: The DN to work in.
+        :param users_dn: The DN to use for user related operations (relative to `base_dn`).
+        :param groups_dn: The DN to use for group related operations (relative to `base_dn`).
+        :param readonly: Either the server is read-only or not.
         """
         if "ldap://" not in server:
             server = "ldap://" + server
@@ -43,14 +49,17 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.user_exists(user):
             raise UserNotFoundError
 
-        dn = self.get_full_group_dn(group)
-        mod_attrs = [
-            (ldap.MOD_ADD, 'memberUid', [str(user)])
-        ]
-        try:
-            self.cnx.modify_s(str(dn), mod_attrs)
-        except Exception as ex:
-            raise GroupBackendError(ex)
+        if not self.is_group_member(group, user):
+            dn = self.get_full_group_dn(group)
+            mod_attrs = [
+                (ldap.MOD_ADD, 'memberUid', [str(user)])
+            ]
+            try:
+                self.cnx.modify_s(str(dn), mod_attrs)
+                return True
+            except Exception as ex:
+                raise GroupBackendError(ex)
+        return False
 
     def auth_user(self, user, credential, **kwargs):
         """
@@ -100,7 +109,6 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         if self.readonly:
             raise ReadOnlyError
-        self.validate_group_creation_specification(specification)
         # TODO: check if such a group already exists
 
         name = specification.get('groupname')
@@ -130,7 +138,6 @@ class LdapBackend(GroupBackend, UserBackend):
         """
         if self.readonly:
             raise ReadOnlyError
-        self.validate_user_creation_specification(specification)
         # TODO: check if such a user already exists
 
         username = specification.get('username')
@@ -295,27 +302,6 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as e:
             raise GroupBackendError(e)
 
-    def get_required_group_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('groupname', str),
-            ('gidNumber', int)
-        ]
-
-    def get_required_user_creation_fields(self):
-        """
-        :inherit.
-        """
-        return [
-            ('username', str),
-            ('uidNumber', int),
-            ('gidNumber', int),
-            ('password', str),
-            ('homeDirectory', str)
-        ]
-
     def get_user(self, user, **kwargs):
         """
         :inherit.
@@ -400,18 +386,21 @@ class LdapBackend(GroupBackend, UserBackend):
         if not self.group_exists(group):
             raise GroupNotFoundError
 
-        dn = self.get_full_group_dn(group)
-        mod_attrs = [
-            (ldap.MOD_DELETE, 'memberUid', [str(user)])
-        ]
-        try:
-            self.cnx.modify_s(str(dn), mod_attrs)
-        except Exception as ex:
-            raise GroupBackendError(ex)
+        if self.is_group_member(group, user):
+            dn = self.get_full_group_dn(group)
+            mod_attrs = [
+                (ldap.MOD_DELETE, 'memberUid', [str(user)])
+            ]
+            try:
+                self.cnx.modify_s(str(dn), mod_attrs)
+                return True
+            except Exception as ex:
+                raise GroupBackendError(ex)
+        return False
 
     def remove_user_from_all_groups(self, user, **kwargs):
         """
-        :inherit
+        :inherit.
         """
         if self.readonly:
             raise ReadOnlyError
@@ -419,8 +408,7 @@ class LdapBackend(GroupBackend, UserBackend):
             raise UserNotFoundError
 
         for group in self.get_groups():
-            if self.is_group_member(group.get(GroupBackend.FIELD_PK), user):
-                self.remove_group_member(group.get(GroupBackend.FIELD_PK), user)
+            self.remove_group_member(group.get(GroupBackend.FIELD_PK), user)
 
     def set_user_credential(self, user, credential, **kwargs):
         """
@@ -456,31 +444,3 @@ class LdapBackend(GroupBackend, UserBackend):
             return False
         except Exception as ex:
             raise UserBackendError(ex)
-
-    def validate_group_creation_specification(self, specification):
-        """
-        Validate that the specification matches the definition.
-
-        :param specification: The specification to validate.
-        """
-        for rname, rtype in self.get_required_group_creation_fields():
-            field = specification.get(rname)
-            # TODO: raise errors
-            if field is None:
-                pass
-            elif not isinstance(field, rtype):
-                pass
-
-    def validate_user_creation_specification(self, specification):
-        """
-        Validate that the specification matches the definition.
-
-        :param specification: The specification to validate.
-        """
-        for rname, rtype in self.get_required_user_creation_fields():
-            field = specification.get(rname)
-            # TODO: raise errors
-            if field is None:
-                pass
-            elif not isinstance(field, rtype):
-                pass
