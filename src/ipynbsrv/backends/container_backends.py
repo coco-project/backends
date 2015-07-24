@@ -173,7 +173,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         :inherit.
         """
-        return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + 'name')
+        return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + name)
 
     def delete_container(self, container, force=False, **kwargs):
         """
@@ -198,12 +198,14 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
     def delete_container_image(self, image, force=False, **kwargs):
         """
         :inherit.
+
+        TODO: raises error: 409 Client Error: Conflict ("Conflict, cannot delete ... because the container ... is using it, use -f to force")
         """
         if not self.container_image_exists(image):
             raise ContainerImageNotFoundError
 
         try:
-            self._client.remove_image(image=image, force=(force is True))
+            self._client.remove_image(image=image, force=True)  # force=(force is True)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -214,9 +216,11 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
     def delete_container_snapshot(self, snapshot, force=False, **kwargs):
         """
         :inherit.
+
+        TODO: raises error: 409 Client Error: Conflict ("Conflict, cannot delete ... because the container ... is using it, use -f to force")
         """
         try:
-            self.delete_container_image(snapshot, force, **kwargs)
+            self.delete_container_image(snapshot, force=True, **kwargs)
         except ContainerImageNotFoundError as ex:
             raise ContainerSnapshotNotFoundError
         except ContainerBackendError as ex:
