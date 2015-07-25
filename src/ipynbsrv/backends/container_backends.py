@@ -113,14 +113,28 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         if clone_of is not None and not self.container_exists(clone_of):
             raise ContainerNotFoundError("Base container for the clone does not exist")
 
+        # cloning
         if clone_of is None:
             image_pk = image
         else:
             # TODO: some way to ensure no regular image is created with that name
             image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())))
             image_pk = image.get(ContainerBackend.KEY_PK)
-        mount_points = [vol.get('source') for vol in volumes]
-        binds = map(lambda bind: "%s:%s" % (bind.get('source'), bind.get('target')), volumes)
+        # bind mounts
+        mount_points = [vol.get(ContainerBackend.VOLUME_KEY_SOURCE) for vol in volumes]
+        binds = map(
+            lambda bind: "%s:%s" % (
+                bind.get(ContainerBackend.VOLUME_KEY_SOURCE),
+                bind.get(ContainerBackend.VOLUME_KEY_TARGET)
+            ),
+            volumes
+        )
+        # port mappings
+        port_mappings = {}
+        for port in ports:
+            port_mappings[port.get(ContainerBackend.PORT_MAPPING_KEY_INTERNAL)] = (
+                port.get(ContainerBackend.PORT_MAPPING_KEY_ADDRESS),
+            )
 
         container = None
         try:
@@ -131,7 +145,8 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                 ports=ports,
                 volumes=mount_points,
                 host_config=docker_utils.create_host_config(
-                    binds=binds
+                    binds=binds,
+                    port_bindings=port_mappings
                 ),
                 environment=kwargs.get('env'),
                 detach=True
