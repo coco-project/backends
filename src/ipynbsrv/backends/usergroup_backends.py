@@ -61,7 +61,7 @@ class LdapBackend(GroupBackend, UserBackend):
                 raise GroupBackendError(ex)
         return False
 
-    def auth_user(self, user, credential, **kwargs):
+    def auth_user(self, user, password, **kwargs):
         """
         :inherit.
         """
@@ -72,7 +72,7 @@ class LdapBackend(GroupBackend, UserBackend):
             user_ldap = LdapBackend(self.server, self.base_dn, self.users_dn)
             user_ldap.connect({
                 'dn': user_ldap.get_full_user_dn(user),
-                'password': credential
+                'password': password
             })
             user_ldap.disconnect()
             return self.get_user(user)
@@ -103,7 +103,7 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as ex:
             raise UserBackendError(ex)
 
-    def create_group(self, specification, **kwargs):
+    def create_group(self, gid, name, **kwargs):
         """
         :inherit.
         """
@@ -111,8 +111,6 @@ class LdapBackend(GroupBackend, UserBackend):
             raise ReadOnlyError
         # TODO: check if such a group already exists
 
-        name = specification.get('groupname')
-        gid = specification.get('gidNumber')
         record = [
             ('objectclass', [
                 'posixGroup',
@@ -132,7 +130,7 @@ class LdapBackend(GroupBackend, UserBackend):
         except Exception as ex:
             raise GroupBackendError(ex)
 
-    def create_user(self, specification, **kwargs):
+    def create_user(self, uid, username, password, gid, home_directory, **kwargs):
         """
         :inherit.
         """
@@ -140,8 +138,6 @@ class LdapBackend(GroupBackend, UserBackend):
             raise ReadOnlyError
         # TODO: check if such a user already exists
 
-        username = specification.get('username')
-        uid = specification.get('uidNumber')
         dn = self.get_full_user_dn(username)
         record = [
             ('objectclass', [
@@ -155,9 +151,9 @@ class LdapBackend(GroupBackend, UserBackend):
             ('sn', [str(username)]),
             ('uid', [str(username)]),
             ('uidNumber', [str(uid)]),
-            ('gidNumber', [str(specification.get('gidNumber'))]),  # FIXME: hmm..
-            ('userpassword', [str(specification.get('password'))]),
-            ('homedirectory', [str(specification.get('homeDirectory'))])
+            ('gidNumber', [str(gid)]),  # FIXME: hmm..
+            ('userpassword', [str(password)]),
+            ('homedirectory', [str(home_directory)])
         ]
         try:
             self.cnx.add_s(str(dn), record)
@@ -410,7 +406,7 @@ class LdapBackend(GroupBackend, UserBackend):
         for group in self.get_groups():
             self.remove_group_member(group.get(GroupBackend.FIELD_PK), user)
 
-    def set_user_credential(self, user, credential, **kwargs):
+    def set_user_password(self, user, password, **kwargs):
         """
         :inherit.
         """
@@ -421,7 +417,7 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         mod_attrs = [
-            (ldap.MOD_REPLACE, 'userpassword', str(credential))
+            (ldap.MOD_REPLACE, 'userpassword', str(password))
         ]
         try:
             self.cnx.modify_s(str(dn), mod_attrs)
