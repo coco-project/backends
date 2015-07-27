@@ -643,7 +643,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ex
 
-    def container_image_exists(self, image):
+    def container_image_exists(self, image, **kwargs):
         """
         :inherit.
         """
