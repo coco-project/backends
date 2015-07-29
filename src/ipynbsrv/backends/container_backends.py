@@ -121,7 +121,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())))
             image_pk = image.get(ContainerBackend.KEY_PK)
         # bind mounts
-        mount_points = [vol.get(ContainerBackend.VOLUME_KEY_SOURCE) for vol in volumes]
+        mount_points = [vol.get(ContainerBackend.VOLUME_KEY_TARGET) for vol in volumes]
         binds = map(
             lambda bind: "%s:%s" % (
                 bind.get(ContainerBackend.VOLUME_KEY_SOURCE),
@@ -142,7 +142,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                 image=image_pk,
                 command=cmd,
                 name=name,
-                ports=ports,
+                ports=[port.get(ContainerBackend.PORT_MAPPING_KEY_INTERNAL) for port in ports],
                 volumes=mount_points,
                 host_config=docker_utils.create_host_config(
                     binds=binds,
@@ -1042,9 +1042,9 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.no_content:
             return True
-        elif status_code == requests.codes.not_found:
+        elif response.status_code == requests.codes.not_found:
             raise ContainerNotFoundError
-        elif status_code == requests.codes.precondition_required:
+        elif response.status_code == requests.codes.precondition_required:
             raise IllegalContainerStateError
         else:
             raise ContainerBackendError
@@ -1072,9 +1072,9 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.no_content:
             return True
-        elif status_code == requests.codes.not_found:
+        elif response.status_code == requests.codes.not_found:
             raise ContainerNotFoundError
-        elif status_code == requests.codes.precondition_required:
+        elif response.status_code == requests.codes.precondition_required:
             raise IllegalContainerStateError
         else:
             raise ContainerBackendError
@@ -1096,9 +1096,9 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.no_content:
             return True
-        elif status_code == requests.codes.not_found:
+        elif response.status_code == requests.codes.not_found:
             raise ContainerNotFoundError
-        elif status_code == requests.codes.precondition_required:
+        elif response.status_code == requests.codes.precondition_required:
             raise IllegalContainerStateError
         else:
             raise ContainerBackendError
@@ -1120,9 +1120,9 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.no_content:
             return True
-        elif status_code == requests.codes.not_found:
+        elif response.status_code == requests.codes.not_found:
             raise ContainerNotFoundError
-        elif status_code == requests.codes.precondition_required:
+        elif response.status_code == requests.codes.precondition_required:
             raise IllegalContainerStateError
         else:
             raise ContainerBackendError
@@ -1144,9 +1144,9 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.no_content:
             return True
-        elif status_code == requests.codes.not_found:
+        elif response.status_code == requests.codes.not_found:
             raise ContainerNotFoundError
-        elif status_code == requests.codes.precondition_required:
+        elif response.status_code == requests.codes.precondition_required:
             raise IllegalContainerStateError
         else:
             raise ContainerBackendError
