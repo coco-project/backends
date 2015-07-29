@@ -705,7 +705,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def create_container_image(self, specification, **kwargs):
+    def create_container_image(self, container, name, **kwargs):
         """
         :inherit.
         """
@@ -713,7 +713,10 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.post(
                 url=self.url + self.slugs.get('images'),
-                data=json.dumps(specification)
+                data=json.dumps({
+                    'container': container,
+                    'name': name
+                })
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -722,6 +725,8 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         if response.status_code == requests.codes.created:
             return response.json()
+        elif response.status_code == requests.codes.not_found:
+            raise ContainerNotFoundError
         else:
             raise ContainerBackendError
 
