@@ -2,12 +2,8 @@ from ipynbsrv.contract.backends import GroupBackend, UserBackend
 from ipynbsrv.contract.errors import *
 import ldap
 
-# TODO: delete users from groups on user delete
-# TODO: delete groups from user on group delete
-# TODO: delete private group of user on user delete
-# TODO: renaming users?
-# TODO: delete user when deleted in django
 
+# TODO: delete private group of user on user delete
 class LdapBackend(GroupBackend, UserBackend):
 
     """

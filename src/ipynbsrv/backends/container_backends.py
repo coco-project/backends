@@ -152,6 +152,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                 detach=True
             )
             container = self.get_container(container.get('Id'))
+            self.start_container(container.get(ContainerBackend.KEY_PK))
         except Exception as ex:
             raise ContainerBackendError(ex)
 
