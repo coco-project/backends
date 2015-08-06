@@ -14,9 +14,9 @@ docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
 
 ### Configuring the Docker daemon
 
-Some adjustments should be made to the default Docker configuration for best security.
+Some adjustments should be made to the default Docker configuration for best security. They are however optional.
 
-Edit `/etc/default/docker` and append some options to the `DOCKER_OPTS` variable so it looks something like:
+Edit `/etc/default/docker` and append additional options to the `DOCKER_OPTS` variable so it looks something like:
 
 ```bash
 DOCKER_OPTS="... --icc=false --iptables=true --ip-forward=true ..."
@@ -28,6 +28,18 @@ Make sure to restart the Docker daemon afterwards:
 
 ```bash
 service docker stop && service docker start
+```
+
+To enable support for resource limiting (memory and swap) edit `/etc/default/grub` and add:
+
+```bash
+GRUB_CMDLINE_LINUX="... cgroup_enable=memory swapaccount=1 ..."
+```
+
+Finish by rebooting the system:
+
+```bash
+update-grub && reboot
 ```
 
 ### Deploying the Docker Registery
