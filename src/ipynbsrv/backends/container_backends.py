@@ -25,15 +25,19 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
     """
     CONTAINER_SNAPSHOT_NAME_PREFIX = 'snapshot-'
 
-    def __init__(self, version, base_url='unix://var/run/docker.sock'):
+    def __init__(self, base_url='unix://var/run/docker.sock', version=None,
+                 registry=None
+                 ):
         """
         Initialize a new Docker container backend.
 
-        :param version: The Docker API version number.
         :param base_url: The URL or unix path to the Docker API endpoint.
+        :param version: The Docker API version number (see docker version).
+        :param registry: If set, created images will be pushed to this registery.
         """
         try:
             self._client = Client(base_url=base_url, version=version)
+            self._registry = registry
         except Exception as ex:
             raise ConnectionError(ex)
 
@@ -138,6 +142,20 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         container = None
         try:
+            if self._registry:
+                parts = image_pk.split('/')
+                if len(parts) > 2:  # includes registry
+                    repository = parts[0] + '/' + parts[1] + '/' + parts[2].split(':')[0]
+                    tag = parts[2].split(':')[1]
+                else:
+                    repository = image_pk.split(':')[0]
+                    tag = image_pk.split(':')[1]
+                # FIXME: should be done automatically
+                self._client.pull(
+                    repository=repository,
+                    tag=tag
+                )
+
             container = self._client.create_container(
                 image=image_pk,
                 command=cmd,
@@ -170,18 +188,38 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        image_name = self.get_internal_container_image_name(container, name)
-        if self.container_image_exists(image_name):
+        full_image_name = self.get_internal_container_image_name(container, name)
+        if self.container_image_exists(full_image_name):
             raise ContainerBackendError("An image with that name already exists for the given container")
 
+        if self._registry:
+            parts = full_image_name.split('/')
+            registry = parts[0]
+            repository = parts[1] + '/' + parts[2].split(':')[0]
+            tag = parts[2].split(':')[1]
+            commit_name = registry + '/' + repository
+        else:
+            repository = full_image_name.split(':')[0]
+            tag = full_image_name.split(':')[1]
+            commit_name = repository
+
         try:
-            image = self._client.commit(
+            self._client.commit(
                 container=container,
-                repository=image_name.split(':')[0],
-                tag=image_name.split(':')[1]
+                repository=commit_name,
+                tag=tag
             )
-            return self.get_container_image(image.get('Id'))
+            if self._registry:
+                self._client.push(
+                    repository=full_image_name,
+                    stream=False,
+                    insecure_registry=True  # TODO: constructor?
+                )
+            return {
+                ContainerBackend.KEY_PK: full_image_name
+            }
         except Exception as ex:
+            print ex
             raise ContainerBackendError(ex)
 
     def create_container_snapshot(self, container, name, **kwargs):
@@ -202,7 +240,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise IllegalContainerStateError
 
         try:
-            return self._client.remove_container(container=container, force=(force is True))
+            return self._client.remove_container(container=container, force=force)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerNotFoundError
@@ -220,7 +258,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise ContainerImageNotFoundError
 
         try:
-            self._client.remove_image(image=image, force=True)  # force=(force is True)
+            self._client.remove_image(image=image, force=force)  # force=(force is True)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -235,7 +273,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         TODO: raises error: 409 Client Error: Conflict ("Conflict, cannot delete ... because the container ... is using it, use -f to force")
         """
         try:
-            self.delete_container_image(snapshot, force=True, **kwargs)
+            self.delete_container_image(snapshot, force=force, **kwargs)
         except ContainerImageNotFoundError as ex:
             raise ContainerSnapshotNotFoundError
         except ContainerBackendError as ex:
@@ -287,8 +325,10 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise ContainerImageNotFoundError
 
         try:
-            image = self._client.inspect_image(image)
-            return self.make_image_contract_conform(image)
+            self._client.inspect_image(image)
+            return {
+                ContainerBackend.KEY_PK: image
+            }
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -304,7 +344,9 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             images = []
             for image in self._client.images():
                 if not self.is_container_snapshot(image):
-                    images.append(self.make_image_contract_conform(image))
+                    images.append({
+                        ContainerBackend.KEY_PK: image.get('RepoTags')[0]
+                    })
             return images
         except Exception as ex:
             raise ContainerBackendError(ex)
@@ -385,13 +427,16 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             container = self._client.inspect_container(container)
             container_name = container.get('Name')
-            return re.sub(
+            container_name = re.sub(
                 # i.e. ipynbsrv-u2500-ipython
                 r'^/' + self.CONTAINER_NAME_PREFIX + r'u(\d+)-(.+)$',
                 # i.e. ipynbsrv-u2500/ipython:shared-name
                 self.CONTAINER_NAME_PREFIX + r'u\g<1>' + '/' + r'\g<2>' + ':' + name,
                 container_name
             )
+            if self._registry:
+                container_name = self._registry + '/' + container_name
+            return container_name
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerNotFoundError
@@ -468,16 +513,6 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             ContainerBackend.KEY_PK: container.get('Id'),
             ContainerBackend.CONTAINER_KEY_PORT_MAPPINGS: self.get_container_port_mappings(container.get('Id')),
             ContainerBackend.CONTAINER_KEY_STATUS: status
-        }
-
-    def make_image_contract_conform(self, image):
-        """
-        Ensure the image dict returned from Docker is confirm with that the contract requires.
-
-        :param image: The image to make conform.
-        """
-        return {
-            ContainerBackend.KEY_PK: image.get('Id')
         }
 
     def make_snapshot_contract_conform(self, snapshot):
