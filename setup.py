@@ -10,7 +10,7 @@ setup(
     install_requires=[
         'docker-py==1.3.1',
         'ipynbsrv-contract',
-        'requests==2.7.0',
-        'python-ldap==2.4.20'
+        'python-ldap==2.4.20',
+        'requests==2.7.0'
     ],
 )
