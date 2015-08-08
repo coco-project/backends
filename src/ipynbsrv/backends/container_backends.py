@@ -1,3 +1,4 @@
+from base64 import standard_b64encode
 from docker import Client, utils as docker_utils
 from docker.errors import APIError as DockerError
 from ipynbsrv.contract.backends import *
@@ -879,7 +880,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         :param container: The container identifier to generate the URL for.
         """
-        return self.url + self.slugs.get('containers') + '/' + container
+        return self.url + self.slugs.get('containers') + '/' + standard_b64encode(container)
 
     def generate_container_snapshots_url(self, container):
         """
@@ -887,7 +888,8 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         :param container: The container identifier to generate the snapshot URL for.
         """
-        return self.url + self.slugs.get('container_snapshots').replace(HttpRemote.PLACEHOLDER_CONTAINER, container)
+        return self.url + self.slugs.get('container_snapshots') \
+                                    .replace(HttpRemote.PLACEHOLDER_CONTAINER, standard_b64encode(container))
 
     def generate_image_url(self, image):
         """
@@ -895,7 +897,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         :param image: The image identifier to generate the URL for.
         """
-        return self.url + self.slugs.get('images') + '/' + image
+        return self.url + self.slugs.get('images') + '/' + standard_b64encode(container)
 
     def generate_snapshot_url(self, snapshot):
         """
@@ -903,7 +905,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         :param snapshot: The snapshot identifier to generate the URL for.
         """
-        return self.url + self.slugs.get('snapshots') + '/' + snapshot
+        return self.url + self.slugs.get('snapshots') + '/' + standard_b64encode(container)
 
     def get_container(self, container, **kwargs):
         """

@@ -89,6 +89,8 @@ The `HttpRemote` is a proxy backend to other container backend implementations s
 
 The `HttpRemote` backend is pre-configured to work flawlessly with the `ipynbsrv.hostapi` package, which provides an HTTP interface to local container backends (e.g. `Docker`). In most cases, this is what you want.
 
+> **Attention:** The resources primary key's are base64 encoded for requests. Make sure to decode on the receiving end!
+
 #### Deploying the HTTP API
 
 First you should install the Python package on the node you want to expose the local container backend:
