@@ -378,19 +378,20 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         try:
             container = self._client.inspect_container(container)
-            container_ports = container.get('HostConfig', {}).get('PortBindings', {})
+            container_ports = container.get('NetworkSettings', {}).get('Ports', None)
             ports = []
-            if container_ports is not None:
+            if container_ports:
                 for port, mappings in container_ports.items():
-                    for mapping in mappings:
-                        address = mapping.get('HostIp')
-                        if len(address) == 0:
-                            address = '0.0.0.0'
-                        ports.append({
-                            ContainerBackend.PORT_MAPPING_KEY_ADDRESS: address,
-                            ContainerBackend.PORT_MAPPING_KEY_EXTERNAL: mapping.get('HostPort'),
-                            ContainerBackend.PORT_MAPPING_KEY_INTERNAL: port
-                        })
+                    if mappings:
+                        for mapping in mappings:
+                            address = mapping.get('HostIp')
+                            if len(address) == 0:
+                                address = '0.0.0.0'
+                            ports.append({
+                                ContainerBackend.PORT_MAPPING_KEY_ADDRESS: address,
+                                ContainerBackend.PORT_MAPPING_KEY_EXTERNAL: mapping.get('HostPort'),
+                                ContainerBackend.PORT_MAPPING_KEY_INTERNAL: port
+                            })
             return ports
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
