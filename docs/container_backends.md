@@ -42,20 +42,20 @@ Finish by rebooting the system:
 update-grub && reboot
 ```
 
-### Deploying the Docker Registery
+### Deploying the Docker Registry
 
 If you want to benefit from the multi-server support built into `ipynbsrv`, you need to ensure that the (internally created) container images are available on all nodes, since the `ServerSelectionAlgorithm` in use might pick a random server to deploy a container.
-One way to accomplish that is using the official Docker Registery as a centralized image store. The documentation can be found here: [https://www.docker.com/docker-registry](https://www.docker.com/docker-registry).
+One way to accomplish that is using the official Docker Registry as a centralized image store. The documentation can be found here: [https://www.docker.com/docker-registry](https://www.docker.com/docker-registry).
 
 The next few chapters summarize the steps required.
 
-#### Running the Registery container
+#### Running the Registry container
 
 ```bash
 docker run -d --name registry \
   --restart=always \
   -p 192.168.0.1:5000:5000 \
-  -e REGISTERY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED=false \
+  -e REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED=false \
   registry:2
 ```
 
@@ -63,7 +63,7 @@ docker run -d --name registry \
 
 #### Configuring the Docker daemon
 
-Because the simpliest deployment process is used for the registery, we have to explicity tell the Docker daemon on each node to trust our registery:
+Because the simpliest deployment process is used for the registry, we have to explicity tell the Docker daemon on each node to trust our registry:
 
 Edit `/etc/default/docker` and append `--insecure-registry` to the `DOCKER_OPTS` variable so it looks something like:
 
@@ -79,7 +79,36 @@ Make sure to restart the Docker daemon afterwards:
 service docker stop && service docker start
 ```
 
---- TODO: constructor arguments ---
+#### Telling the backend about the Registry
+
+Do make use of the registry, you finally have to tell the backend that one is in use. Usually you'll be using the `HttpRemote` backend as a proxy before the actual Docker backend. In this case, you'd have to initialize/run it with:
+
+```bash
+ipynbsrv_hostapi ... --container-backend='ipynbsrv.backends.container_backends.Docker' --container-backend-args='{"registry": "192.168.0.1:5000"}' ...
+```
+
+### Building the container images
+
+Docker containers are bootstrapped from images. The images themselves are created from `Dockerfile`s. You can read more about them here: [http://docs.docker.com/reference/builder/](http://docs.docker.com/reference/builder/).
+
+To make it easy for you, the Docker container backend ships with its own `Dockerfile` that is highly optimized for the use with `ipynbsrv`. It takes care of port mappings, mount points (volumes) and access control, which will limit access to the owner of the container.
+
+To get started, get the files from [https://git.rackster.ch/ipynbsrv/dockerfiles/tree/master/base-ldap](https://git.rackster.ch/ipynbsrv/dockerfiles/tree/master/base-ldap) (or even better, clone the whole repository) and `cd` into the `base-ldap` directory. To build the image, issue:
+
+```bash
+docker build -t ipynbsrv/base-ldap:latest .
+```
+
+#### Pushing the image to the Registry
+
+Building the image as described above is enough if you are deploying a single-server setup. If you are however deploying multiple servers, make sure the image is available on all nodes. This can be archived by tagging and pushing the newly build image to our private registry:
+
+```
+docker tag ipynbsrv/base-ldap:latest 192.168.0.1:5000/ipynbsrv/base-ldap:latest
+docker push 192.168.0.1:5000/ipynbsrv/base-ldap:latest
+```
+
+> `192.168.0.1` is the internal only IPv4 address of the node the registry is run on (usually the master node).
 
 ## HttpRemote
 
