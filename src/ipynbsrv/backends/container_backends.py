@@ -108,11 +108,12 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         return self.container_image_exists(snapshot, **kwargs)
 
-    def create_container(self, name, ports, volumes, cmd=None, image=None, clone_of=None, **kwargs):
+    def create_container(self, username, uid, name, ports, volumes,
+                         cmd=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
-        name = self.CONTAINER_NAME_PREFIX + name
+        name = "%s-u%i-%s" % (self.CONTAINER_NAME_PREFIX, uid, name)
         if self.container_exists(name):
             raise ContainerBackendError("A container with that name already exists")
         if clone_of is not None and not self.container_exists(clone_of):
@@ -167,7 +168,9 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                     binds=binds,
                     port_bindings=port_mappings
                 ),
-                environment=kwargs.get('env'),
+                environment={
+                    'OWNER': username
+                },
                 detach=True
             )
             container = self.get_container(container.get('Id'))
@@ -708,11 +711,14 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         snapshots = self.get_container_snapshots()
         return next((sh for sh in snapshots if snapshot == sh.get(ContainerBackend.KEY_PK)), False) is not False
 
-    def create_container(self, name, ports, volumes, cmd=None, image=None, clone_of=None, **kwargs):
+    def create_container(self, username, uid, name, ports, volumes,
+                         cmd=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
         specification = {
+            'username': username,
+            'uid', uid,
             'name': name,
             'ports': ports,
             'volumes': volumes,
