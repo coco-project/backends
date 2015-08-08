@@ -230,17 +230,15 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + name)
 
-    def delete_container(self, container, force=False, **kwargs):
+    def delete_container(self, container, **kwargs):
         """
         :inherit.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if force is not True and self.container_is_running(container):
-            raise IllegalContainerStateError
 
         try:
-            return self._client.remove_container(container=container, force=force)
+            return self._client.remove_container(container=container, force=True)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerNotFoundError
@@ -248,7 +246,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_container_image(self, image, force=False, **kwargs):
+    def delete_container_image(self, image, **kwargs):
         """
         :inherit.
         """
@@ -256,7 +254,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise ContainerImageNotFoundError
 
         try:
-            self._client.remove_image(image=image, force=force)
+            self._client.remove_image(image=image, force=True)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -264,12 +262,12 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
+    def delete_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
         try:
-            self.delete_container_image(snapshot, force, **kwargs)
+            self.delete_container_image(snapshot, **kwargs)
         except ContainerImageNotFoundError as ex:
             raise ContainerSnapshotNotFoundError
         except ContainerBackendError as ex:
@@ -519,20 +517,15 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         return self.make_image_contract_conform(snapshot)
 
-    def restart_container(self, container, force=False, **kwargs):
+    def restart_container(self, container, **kwargs):
         """
         :inherit.
-
-        :param force: If true, kill the container if it doesn't want to stop.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
 
         try:
-            if force:
-                return self._client.restart(container=container, timeout=0)
-            else:
-                return self._client.restart(container=container)
+            return self._client.restart(container=container, timeout=0)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -540,7 +533,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def restore_container_snapshot(self, container, snapshot, force=False, **kwargs):
+    def restore_container_snapshot(self, container, snapshot, **kwargs):
         """
         :inherit.
         """
@@ -551,7 +544,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         raise NotImplementedError
 
-    def resume_container(self, container, force=False, **kwargs):
+    def resume_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -585,23 +578,17 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def stop_container(self, container, force=False, **kwargs):
+    def stop_container(self, container, **kwargs):
         """
         :inherit.
-
-        :param force: If true, kill the container if it doesn't want to stop.
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
         if not self.container_is_running(container):
             raise IllegalContainerStateError
 
-        force = kwargs.get('force')
         try:
-            if force:
-                return self._client.stop(container=container, timeout=0)
-            else:
-                return self._client.stop(container=container)
+            return self._client.stop(container=container, timeout=0)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
                 raise ContainerImageNotFoundError
@@ -609,7 +596,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def suspend_container(self, container, force=False, **kwargs):
+    def suspend_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -784,7 +771,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def delete_container(self, container, force=False, **kwargs):
+    def delete_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -792,9 +779,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.delete(
                 url=self.generate_container_url(container),
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -808,7 +793,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def delete_container_image(self, image, force=False, **kwargs):
+    def delete_container_image(self, image, **kwargs):
         """
         :inherit.
         """
@@ -816,9 +801,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.delete(
                 url=self.generate_image_url(image),
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -832,7 +815,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def delete_container_snapshot(self, snapshot, force=False, **kwargs):
+    def delete_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
         """
@@ -840,9 +823,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.delete(
                 url=self.generate_snapshot_url(snapshot),
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -1076,7 +1057,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def restart_container(self, container, force=False, **kwargs):
+    def restart_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -1084,9 +1065,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/restart',
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -1102,13 +1081,13 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def restore_container_snapshot(self, container, snapshot, force=False, **kwargs):
+    def restore_container_snapshot(self, container, snapshot, **kwargs):
         """
         :inherit.
         """
         raise NotImplementedError
 
-    def resume_container(self, container, force=False, **kwargs):
+    def resume_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -1116,9 +1095,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/resume',
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -1158,7 +1135,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def stop_container(self, container, force=False, **kwargs):
+    def stop_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -1166,9 +1143,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/stop',
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
@@ -1184,7 +1159,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         else:
             raise ContainerBackendError
 
-    def suspend_container(self, container, force=False, **kwargs):
+    def suspend_container(self, container, **kwargs):
         """
         :inherit.
         """
@@ -1192,9 +1167,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             response = requests.post(
                 url=self.generate_container_url(container) + '/suspend',
-                data=json.dumps({
-                    'force': force
-                })
+                data=json.dumps({})
             )
         except RequestException as ex:
             raise ConnectionError(ex)
