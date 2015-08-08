@@ -718,7 +718,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         specification = {
             'username': username,
-            'uid', uid,
+            'uid': uid,
             'name': name,
             'ports': ports,
             'volumes': volumes,
