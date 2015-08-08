@@ -113,7 +113,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         :inherit.
         """
-        name = "%s-u%i-%s" % (self.CONTAINER_NAME_PREFIX, uid, name)
+        name = "%su%i-%s" % (self.CONTAINER_NAME_PREFIX, uid, name)
         if self.container_exists(name):
             raise ContainerBackendError("A container with that name already exists")
         if clone_of is not None and not self.container_exists(clone_of):
