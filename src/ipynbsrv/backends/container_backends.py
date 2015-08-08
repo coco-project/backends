@@ -691,7 +691,8 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         :inherit.
         """
         container = self.get_container(container)
-        return container.get(ContainerBackend.CONTAINER_KEY_STATUS) == ContainerBackend.CONTAINER_STATUS_RUNNING
+        return container.get(ContainerBackend.CONTAINER_KEY_STATUS) == ContainerBackend.CONTAINER_STATUS_RUNNING \
+            or container.get(ContainerBackend.CONTAINER_KEY_STATUS) == ContainerBackend.CONTAINER_STATUS_SUSPENDED
 
     def container_is_suspended(self, container, **kwargs):
         """
