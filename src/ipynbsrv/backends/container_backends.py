@@ -240,7 +240,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             if self.container_is_suspended(container):
                 self.resume_container(container)
-            if self.container_is_running(container)
+            if self.container_is_running(container):
                 self.stop_container(container)
         except:
             pass
