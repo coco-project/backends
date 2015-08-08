@@ -109,7 +109,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         return self.container_image_exists(snapshot, **kwargs)
 
     def create_container(self, username, uid, name, ports, volumes,
-                         cmd=None, image=None, clone_of=None, **kwargs):
+                         cmd=None, base_url=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
@@ -169,7 +169,8 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                     port_bindings=port_mappings
                 ),
                 environment={
-                    'OWNER': username
+                    'OWNER': username,
+                    'BASE_URL': base_url
                 },
                 detach=True
             )
@@ -380,37 +381,6 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         except Exception as ex:
             raise ContainerBackendError(ex)
 
-    def get_container_port_mappings(self, container, **kwargs):
-        """
-        :inherit.
-        """
-        if not self.container_exists(container):
-            raise ContainerNotFoundError
-
-        try:
-            container = self._client.inspect_container(container)
-            container_ports = container.get('NetworkSettings', {}).get('Ports', None)
-            ports = []
-            if container_ports:
-                for port, mappings in container_ports.items():
-                    if mappings:
-                        for mapping in mappings:
-                            address = mapping.get('HostIp')
-                            if len(address) == 0:
-                                address = '0.0.0.0'
-                            ports.append({
-                                ContainerBackend.PORT_MAPPING_KEY_ADDRESS: address,
-                                ContainerBackend.PORT_MAPPING_KEY_EXTERNAL: mapping.get('HostPort'),
-                                ContainerBackend.PORT_MAPPING_KEY_INTERNAL: port
-                            })
-            return ports
-        except DockerError as ex:
-            if ex.response.status_code == requests.codes.not_found:
-                raise ContainerNotFoundError
-            raise ContainerBackendError(ex)
-        except Exception as ex:
-            raise ContainerBackendError(ex)
-
     def get_container_snapshot(self, snapshot, **kwargs):
         """
         :inherit.
@@ -517,7 +487,6 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         return {
             ContainerBackend.KEY_PK: container.get('Id'),
-            ContainerBackend.CONTAINER_KEY_PORT_MAPPINGS: self.get_container_port_mappings(container.get('Id')),
             ContainerBackend.CONTAINER_KEY_STATUS: status
         }
 
@@ -712,7 +681,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
         return next((sh for sh in snapshots if snapshot == sh.get(ContainerBackend.KEY_PK)), False) is not False
 
     def create_container(self, username, uid, name, ports, volumes,
-                         cmd=None, image=None, clone_of=None, **kwargs):
+                         cmd=None, base_url=None, image=None, clone_of=None, **kwargs):
         """
         :inherit.
         """
@@ -723,6 +692,7 @@ class HttpRemote(SnapshotableContainerBackend, SuspendableContainerBackend):
             'ports': ports,
             'volumes': volumes,
             'cmd': cmd,
+            'base_url': base_url,
             'image': image,
             'clone_of': clone_of
         }
