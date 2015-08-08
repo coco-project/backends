@@ -238,6 +238,14 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise ContainerNotFoundError
 
         try:
+            if self.container_is_suspended(container):
+                self.resume_container(container)
+            if self.container_is_running(container)
+                self.stop_container(container)
+        except:
+            pass
+
+        try:
             return self._client.remove_container(container=container, force=True)
         except DockerError as ex:
             if ex.response.status_code == requests.codes.not_found:
@@ -571,8 +579,8 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if self.container_is_running(container):
-            raise IllegalContainerStateError
+        # if self.container_is_running(container):
+        #     raise IllegalContainerStateError
 
         try:
             return self._client.start(container=container, **kwargs)
@@ -585,8 +593,13 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if not self.container_is_running(container):
-            raise IllegalContainerStateError
+        # if not self.container_is_running(container):
+        #     raise IllegalContainerStateError
+
+        try:
+            self.resume_container(container)
+        except:
+            pass
 
         try:
             return self._client.stop(container=container, timeout=0)
@@ -603,7 +616,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if not self.container_is_running(container) or self.container_is_suspended(container):
+        if not self.container_is_running(container):  # or self.container_is_suspended(container):
             raise IllegalContainerStateError
 
         try:
