@@ -110,6 +110,23 @@ docker push 192.168.0.1:5000/ipynbsrv/base-ldap:latest
 
 > `192.168.0.1` is the internal only IPv4 address of the node the registry is run on (usually the master node).
 
+#### Adding the images to the application
+
+Last but not least, you have to add the images to the application's database. For that, login to the admin interface and go to **Core -> Container Images**.
+
+You can pick what ever name you want, a meaningful description and an owner.
+
+> If it's a system-wide public image, it is best to choose a superadmin as owner.
+
+The important fields are the **Backend Properties**. Fill them as follow:
+
+- **Backend PK:** The primary key identifying this image. For `Docker` this is something like `192.168.0.1:5000/ipynbsrv/ipython2-notebook:latest`. Run `docker images` to get that identifier.
+- **Command:** The command to run is specified by the image in use. Consult the image's `Dockerfile` to find it.
+- **Protected Port:** Again, this depends on the image. Check out the image's `Dockerfile`.
+- **Public Ports:** Same game again.
+
+After saving the image, containers can be created from it.
+
 ## HttpRemote
 
 The `HttpRemote` is a proxy backend to other container backend implementations supporting an HTTP interface. It's perfectly suitable for remote nodes, where the local backend is exposed via an HTTP API. The default multi-server implementation is build around this behavior.
