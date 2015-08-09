@@ -6,7 +6,7 @@
 
 Using the `Docker` backend, one can use an existing Docker server for deploying (user) created containers. The implemenation is based on the official `docker-py` package and communicates with the Docker daemon over its Unix socket. The only requirement is therefor access to that socket and enough permissions to read to/write from it.
 
-This backend is perfectly suited for single-server deployments. Make sure to mount the Docker Unix socket within the main container in that case:
+This backend is perfectly suited for single-server deployments. Make sure to mount the Docker Unix socket within the main container in that case (for multi-server, see below):
 
 ```bash
 docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
@@ -27,7 +27,7 @@ DOCKER_OPTS="... --icc=false --iptables=true --ip-forward=true ..."
 Make sure to restart the Docker daemon afterwards:
 
 ```bash
-service docker stop && service docker start
+$ service docker stop && service docker start
 ```
 
 To enable support for resource limiting (memory and swap) edit `/etc/default/grub` and add:
@@ -39,7 +39,7 @@ GRUB_CMDLINE_LINUX="... cgroup_enable=memory swapaccount=1 ..."
 Finish by rebooting the system:
 
 ```bash
-update-grub && reboot
+$ update-grub && reboot
 ```
 
 ### Deploying the Docker Registry
@@ -52,14 +52,14 @@ The next few chapters summarize the steps required.
 #### Running the Registry container
 
 ```bash
-docker run -d --name registry \
+$ docker run -d --name registry \
   --restart=always \
   -p 192.168.0.1:5000:5000 \
   -e REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED=false \
   registry:2
 ```
 
-> `192.168.0.1` should be the internal only IPv4 address of the node the container runs on (usually the master).
+> `192.168.0.1` should be the internal only IPv4 address of the node this container runs on (usually the master).
 
 #### Configuring the Docker daemon
 
@@ -71,12 +71,12 @@ Edit `/etc/default/docker` and append `--insecure-registry` to the `DOCKER_OPTS`
 DOCKER_OPTS="... --insecure-registry 192.168.0.1:5000 ..."
 ```
 
-> `192.168.0.1` should be the internal only IPv4 address of the node the container runs on (usually the master).
+> `192.168.0.1` should be the internal only IPv4 address of the node the registry runs on (usually the master).
 
 Make sure to restart the Docker daemon afterwards:
 
 ```bash
-service docker stop && service docker start
+$ service docker stop && service docker start
 ```
 
 #### Telling the backend about the Registry
@@ -84,7 +84,7 @@ service docker stop && service docker start
 Do make use of the registry, you finally have to tell the backend that one is in use. Usually you'll be using the `HttpRemote` backend as a proxy before the actual Docker backend. In this case, you'd have to initialize/run it with:
 
 ```bash
-ipynbsrv_hostapi ... --container-backend='ipynbsrv.backends.container_backends.Docker' --container-backend-args='{"registry": "192.168.0.1:5000"}' ...
+$ ipynbsrv_hostapi ... --container-backend='ipynbsrv.backends.container_backends.Docker' --container-backend-args='{"registry": "192.168.0.1:5000"}' ...
 ```
 
 ### Building the container images
@@ -93,10 +93,10 @@ Docker containers are bootstrapped from images. The images themselves are create
 
 To make it easy for you, the Docker container backend ships with its own `Dockerfile` that is highly optimized for the use with `ipynbsrv`. It takes care of port mappings, mount points (volumes) and access control, which will limit access to the owner of the container.
 
-To get started, get the files from [https://git.rackster.ch/ipynbsrv/dockerfiles/tree/master/base-ldap](https://git.rackster.ch/ipynbsrv/dockerfiles/tree/master/base-ldap) (or even better, clone the whole repository) and `cd` into the `base-ldap` directory. To build the image, issue:
+To get started, get the files from [https://git.rackster.ch/ipynbsrv/dockerfiles/](https://git.rackster.ch/ipynbsrv/dockerfiles/) (or even better, clone the whole repository) and `cd` into i.e. the `base-ldap` directory. To build the image, issue:
 
 ```bash
-docker build -t ipynbsrv/base-ldap:latest .
+$ docker build -t ipynbsrv/base-ldap:latest .
 ```
 
 #### Pushing the image to the Registry
@@ -104,8 +104,8 @@ docker build -t ipynbsrv/base-ldap:latest .
 Building the image as described above is enough if you are deploying a single-server setup. If you are however deploying multiple servers, make sure the image is available on all nodes. This can be archived by tagging and pushing the newly build image to our private registry:
 
 ```
-docker tag ipynbsrv/base-ldap:latest 192.168.0.1:5000/ipynbsrv/base-ldap:latest
-docker push 192.168.0.1:5000/ipynbsrv/base-ldap:latest
+$ docker tag ipynbsrv/base-ldap:latest 192.168.0.1:5000/ipynbsrv/base-ldap:latest
+$ docker push 192.168.0.1:5000/ipynbsrv/base-ldap:latest
 ```
 
 > `192.168.0.1` is the internal only IPv4 address of the node the registry is run on (usually the master node).
@@ -135,20 +135,18 @@ The `HttpRemote` is a proxy backend to other container backend implementations s
 
 The `HttpRemote` backend is pre-configured to work flawlessly with the `ipynbsrv.hostapi` package, which provides an HTTP interface to local container backends (e.g. `Docker`). In most cases, this is what you want.
 
-> **Attention:** The resources primary key's are base64 encoded for requests. Make sure to decode on the receiving end!
-
 #### Deploying the HTTP API
 
 First you should install the Python package on the node you want to expose the local container backend:
 
 ```bash
-pip install ipynbsrv-hostapi
+$ pip install ipynbsrv-hostapi
 ```
 
 Run it afterwards (see the `ipynbsrv.hostapi` documentation for all supported parameters):
 
 ```bash
-nohup ipynbsrv_hostapi --listen 192.168.0.2 &
+$ nohup ipynbsrv_hostapi --listen 192.168.0.2 &
 ```
 
 > `192.168.0.2` is the internal only IPv4 address of the to be exposed node.
