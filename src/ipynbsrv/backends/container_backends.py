@@ -120,12 +120,12 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             raise ContainerNotFoundError("Base container for the clone does not exist")
 
         # cloning
-        if clone_of is None:
-            image_pk = image
-        else:
+        if clone_of:
             # TODO: some way to ensure no regular image is created with that name
             image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())))
             image_pk = image.get(ContainerBackend.KEY_PK)
+        else:
+            image_pk = image
         # bind mounts
         mount_points = [vol.get(ContainerBackend.VOLUME_KEY_TARGET) for vol in volumes]
         binds = map(
@@ -140,6 +140,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         for port in ports:
             port_mappings[port.get(ContainerBackend.PORT_MAPPING_KEY_INTERNAL)] = (
                 port.get(ContainerBackend.PORT_MAPPING_KEY_ADDRESS),
+                port.get(ContainerBackend.PORT_MAPPING_KEY_EXTERNAL)
             )
 
         container = None
