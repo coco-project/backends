@@ -12,6 +12,8 @@ This backend is perfectly suited for single-server deployments. Make sure to mou
 docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
 ```
 
+Additionally, you don't have to setup special networking since Docker already has the `docker0` interface, which conforms with the networking specification. You can use its IPv4 address (see `ifconfig`) for the internal IP field.
+
 ### Configuring the Docker daemon
 
 Some adjustments should be made to the default Docker configuration for best security. They are however optional.
