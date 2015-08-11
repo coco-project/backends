@@ -4,7 +4,7 @@
 
 ## LdapBackend
 
-The *Lightweight Directory Access Protocol* is a widly supported protocol to communicate with directory servers like Window's Active Directory. The `LdapBackend` implements the `GroupBackend` and `UserBackend` contracts to use such a directory service as an `ipynbsrv` backend. It can be used to allow users on an existing directory service to login to the application. Under the hood, the `python-ldap` package is used.
+The *Lightweight Directory Access Protocol* is a widely supported protocol to communicate with directory servers like Window's Active Directory. The `LdapBackend` implements the `GroupBackend` and `UserBackend` contracts to use such a directory service as an `ipynbsrv` backend. It can be used to allow users on an existing directory service to login to the application. Under the hood, the `python-ldap` package is used.
 
 This backend is also used for the internally used LDAP server, on which user accounts and groups are stored (so the application doesn't have to rely on the external backend).
 

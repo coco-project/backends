@@ -12,6 +12,8 @@ This backend is perfectly suited for single-server deployments. Make sure to mou
 docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
 ```
 
+Additionally, you don't have to setup special networking since Docker already has the `docker0` interface, which conforms with the networking specification. You can use its IPv4 address (see `ifconfig`) for the internal IP field.
+
 ### Configuring the Docker daemon
 
 Some adjustments should be made to the default Docker configuration for best security. They are however optional.
@@ -149,6 +151,8 @@ Run it afterwards (see the `ipynbsrv.hostapi` documentation for all supported pa
 $ nohup ipynbsrv_hostapi --listen 192.168.0.2 &
 ```
 
-> `192.168.0.2` is the internal only IPv4 address of the to be exposed node.
-> –––
-> Consider using a process monitoring tool like `monit` or `supervisord` to make sure the API is accessable all time.
+> `192.168.0.2` is the internal only IPv4 address of the to be exposed node.    
+> –––    
+> Consider using a process monitoring tool like `monit` or `supervisord` to make sure the API is accessable all time.    
+> –––  
+> The command is best placed in `/etc/rc.local` (before `exit 0`) so it is executed on boot.
