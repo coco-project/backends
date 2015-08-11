@@ -39,7 +39,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         try:
             self._client = Client(
                 base_url=base_url,
-                timeout=300,
+                timeout=600,
                 version=version
             )
             self._registry = registry
@@ -126,7 +126,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         # cloning
         if clone_of:
             # TODO: some way to ensure no regular image is created with that name
-            image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())))
+            image = self.create_container_image(clone_of, 'for-clone-' + name + '-at-' + str(int(time.time())), push=False)
             image_pk = image.get(ContainerBackend.KEY_PK)
         else:
             image_pk = image
@@ -149,7 +149,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
 
         container = None
         try:
-            if self._registry:
+            if self._registry and not clone_of:
                 parts = image_pk.split('/')
                 if len(parts) > 2:  # includes registry
                     repository = parts[0] + '/' + parts[1] + '/' + parts[2].split(':')[0]
@@ -220,7 +220,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
                 repository=commit_name,
                 tag=tag
             )
-            if self._registry:
+            if self._registry and kwargs.get('push', True):
                 self._client.push(
                     repository=full_image_name,
                     stream=False,
