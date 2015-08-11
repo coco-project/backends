@@ -37,7 +37,11 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         :param registry: If set, created images will be pushed to this registery.
         """
         try:
-            self._client = Client(base_url=base_url, version=version)
+            self._client = Client(
+                base_url=base_url,
+                timeout=300,
+                version=version
+            )
             self._registry = registry
         except Exception as ex:
             raise ConnectionError(ex)
