@@ -1,6 +1,7 @@
 from ipynbsrv.contract.backends import GroupBackend, UserBackend
 from ipynbsrv.contract.errors import *
 import ldap
+from passlib.hash import ldap_md5_crypt
 
 
 # TODO: delete private group of user on user delete
@@ -135,6 +136,7 @@ class LdapBackend(GroupBackend, UserBackend):
         # TODO: check if such a user already exists
 
         dn = self.get_full_user_dn(username)
+        password = self.encrypt_password(password)
         record = [
             ('objectclass', [
                 'person',
@@ -208,6 +210,14 @@ class LdapBackend(GroupBackend, UserBackend):
             raise ConnectionError(ex)
         except Exception as ex:
             raise UserBackendError(ex)
+
+    def encrypt_password(self, password):
+        """
+        Encrypts the password before storing it in LDAP.
+
+        :param password: The password to encrypt.
+        """
+        return ldap_md5_crypt.encrypt(password)
 
     def get_full_dn(self, cn):
         """
@@ -413,7 +423,7 @@ class LdapBackend(GroupBackend, UserBackend):
 
         dn = self.get_full_user_dn(user)
         mod_attrs = [
-            (ldap.MOD_REPLACE, 'userpassword', str(password))
+            (ldap.MOD_REPLACE, 'userpassword', str(self.encrypt_password(password)))
         ]
         try:
             self.cnx.modify_s(str(dn), mod_attrs)
