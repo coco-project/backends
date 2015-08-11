@@ -48,7 +48,7 @@ ldapadd -h localhost -p 389 -c -x -D cn=admin,dc=ipynbsrv,dc=ldap -W -f _users.l
 
 You can use whatever Ldap Admin tool you like. If you use `Docker` as your `ContainerBackend`, we recommend you to use [phpLDAPadmin](http://phpldapadmin.sourceforge.net/wiki/index.php/Main_Page), as there is a phpLDAPadmin docker image available in the official docker registry.
 
-### phpLDAPadmin
+##### phpLDAPadmin
 Setting up the `phpLDAPadmin` container only takes a few commands.
 
 First, download the git repo with the dockerfiles to your local filesystem.
