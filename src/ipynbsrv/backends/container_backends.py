@@ -237,7 +237,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         :inherit.
         """
-        return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + name)
+        return self.create_container_image(container, self.CONTAINER_SNAPSHOT_NAME_PREFIX + name, push=False)
 
     def delete_container(self, container, **kwargs):
         """
