@@ -150,8 +150,9 @@ class LdapBackend(GroupBackend, UserBackend):
             ('uid', [str(username)]),
             ('uidNumber', [str(uid)]),
             ('gidNumber', [str(gid)]),  # FIXME: hmm..
-            ('userpassword', [str(password)]),
-            ('homedirectory', [str(home_directory)])
+            ('userPassword', [str(password)]),
+            ('homeDirectory', [str(home_directory)]),
+            ('loginShell', [str('/bin/bash')])
         ]
         try:
             self.cnx.add_s(str(dn), record)
