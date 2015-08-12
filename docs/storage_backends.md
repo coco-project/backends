@@ -38,7 +38,7 @@ Finally, the remote directory can be mounted:
 
 ```bash
 $ mkdir /srv/ipynbsrv/data
-$ sshfs -C -o IdentityFile=/root/.ssh/ipynbsrv_sshfs,reconnect,cache_timeout=3,nomap=ignore,allow_other root@192.168.0.1:/srv/ipynbsrv/data/ /srv/ipynbsrv/data/
+$ sshfs -C -o IdentityFile=/root/.ssh/ipynbsrv_sshfs,reconnect,cache_timeout=3,nomap=ignore,allow_other,default_permissions root@192.168.0.1:/srv/ipynbsrv/data/ /srv/ipynbsrv/data/
 ```
 
 > `192.168.0.1` is the internal only IPv4 address of the node the directory actually resists on (usually the master).    

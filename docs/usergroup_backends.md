@@ -46,26 +46,25 @@ ldapadd -h localhost -p 389 -c -x -D cn=admin,dc=ipynbsrv,dc=ldap -W -f _users.l
 
 #### Managing user accounts
 
-You can use whatever Ldap Admin tool you like. If you use `Docker` as your `ContainerBackend`, we recommend you to use [phpLDAPadmin](http://phpldapadmin.sourceforge.net/wiki/index.php/Main_Page), as there is a phpLDAPadmin docker image available in the official docker registry.
+You can use whatever LDAP server administration tool you like. If you use `Docker` as your `ContainerBackend`, we recommend you to use [phpLDAPadmin](http://phpldapadmin.sourceforge.net/wiki/index.php/Main_Page), as there is a phpLDAPadmin Docker image available in the official Docker Registry.
 
-Setting up the `phpLDAPadmin` container only takes a few commands.
-
-First, download the git repo with the dockerfiles to your local filesystem.
+Setting up the container only takes one command:
 
 ```bash
-git clone https://github.com/osixia/docker-phpLDAPadmin
+docker run -d \
+  --name ipynbsrv_phpldapadmin \
+  -e HTTPS=false -e LDAP_HOSTS=ipynbsrv_ldap \
+  --link ipynbsrv_ldap:ipynbsrv_ldap \
+  -p 0.0.0.0:82:80 \
+  osixia/phpldapadmin:latest
 ```
 
-Then go into the directory you just downloaded and build the docker image.
-```bash
-cd / docker-phpLDAPadmin
-make build
-```
+> `LDAP_HOSTS` has to be the address under which the LDAP server can be reached. If you are running the container on the node hosting the LDAP server (usually the master node), you can link the LDAP container and use the defined link name for that.    
+> ––––    
+> `--link ipynbsrv_ldap:ipynbsrv_ldap` links the local container named `ipynbsrv_ldap` into the container and makes it available as `ipynbsrv_ldap`.    
+> ––––    
+> `-p 0.0.0.0:82:80` instructs Docker to expose the service on all interfaces on port 82. You can therefor access it via <server-IP>:82 afterwards.
 
-Last but not least, create the container to run the `phpLDAPadmin` application.
+The login password is the LDAP server's admin password you have set during creation and the "username" is `cn=admin,dc=ipynbsrv,dc=ldap`.
 
-```bash
-$ docker run -h phpldapadmin -e HTTPS=false -e LDAP_HOSTS=ipynbsrv.ldap -d --link ipynbsrv.ldap:ipynbsrv.ldap -p 81:80 --name ipynbsrv_phpldapadmin osixia/phpldapadmin:latest
-```
-
-You can now access the `phpLDAPadmin` application in the browser of your docker host when visiting http://localhost:81.
+Now you should have a nice web interface with which you can manage the user accounts within the `_users` organizational unit. When adding a new user, make sure to select *Posix Account* as the structural item.
