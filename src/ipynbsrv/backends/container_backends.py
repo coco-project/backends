@@ -521,7 +521,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
         """
         if not self.container_exists(container):
             raise ContainerNotFoundError
-        if not self.container_snapshot_exists(container, snapshot):
+        if not self.container_snapshot_exists(snapshot):
             raise ContainerSnapshotNotFoundError
 
         raise NotImplementedError
