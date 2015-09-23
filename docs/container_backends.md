@@ -16,12 +16,18 @@ Additionally, you don't have to setup special networking since Docker already ha
 
 ### Configuring the Docker daemon
 
-Some adjustments should be made to the default Docker configuration for best security. They are however optional.
+Some adjustments should be made to the default Docker configuration (for best security). They are however optional.
 
 Edit `/etc/default/docker` and append additional options to the `DOCKER_OPTS` variable so it looks something like:
 
 ```bash
 DOCKER_OPTS="... --icc=false --iptables=true --ip-forward=true ..."
+```
+
+Also, to let Docker restart all containers that were running before a hardware reboot, add the following option:
+
+```bash
+DOCKER_OPTS="... -r=true ..."
 ```
 
 > If you're using `Open vSwitch` for the internal multi-server network, `--mtu=1420` must be added as well.
