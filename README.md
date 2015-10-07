@@ -1,3 +1,3 @@
-# ipynbsrv-backends
+# coco-backends
 
-> Various ipynbsrv backend contract implementations.
+> Various coco backend contract implementations.

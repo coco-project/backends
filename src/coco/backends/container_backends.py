@@ -1,8 +1,8 @@
 from base64 import standard_b64encode
+from coco.contract.backends import *
+from coco.contract.errors import *
 from docker import Client, utils as docker_utils
 from docker.errors import APIError as DockerError
-from ipynbsrv.contract.backends import *
-from ipynbsrv.contract.errors import *
 import json
 import re
 import requests
@@ -19,7 +19,7 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
     """
     The prefix that is prepended to the name of created containers.
     """
-    CONTAINER_NAME_PREFIX = 'ipynbsrv-'
+    CONTAINER_NAME_PREFIX = 'coco-'
 
     """
     The prefix that is prepended to the name of created container snapshots.
@@ -409,9 +409,9 @@ class Docker(SnapshotableContainerBackend, SuspendableContainerBackend):
             container = self._client.inspect_container(container)
             container_name = container.get('Name')
             container_name = re.sub(
-                # i.e. ipynbsrv-u2500-ipython
+                # i.e. coco-u2500-ipython
                 r'^/' + self.CONTAINER_NAME_PREFIX + r'u(\d+)-(.+)$',
-                # i.e. ipynbsrv-u2500/ipython:shared-name
+                # i.e. coco-u2500/ipython:shared-name
                 self.CONTAINER_NAME_PREFIX + r'u\g<1>' + '/' + r'\g<2>' + ':' + name,
                 container_name
             )

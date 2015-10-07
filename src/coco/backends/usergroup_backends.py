@@ -1,5 +1,5 @@
-from ipynbsrv.contract.backends import GroupBackend, UserBackend
-from ipynbsrv.contract.errors import *
+from coco.contract.backends import GroupBackend, UserBackend
+from coco.contract.errors import *
 import ldap
 from passlib.hash import ldap_md5_crypt
 

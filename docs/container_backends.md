@@ -1,6 +1,6 @@
 # Container Backends
 
-> Official `ipynbsrv.contract.backends.ContainerBackend` implementations from the core developers.
+> Official `coco.contract.backends.ContainerBackend` implementations from the core developers.
 
 ## Docker
 
@@ -52,7 +52,7 @@ $ update-grub && reboot
 
 ### Deploying the Docker Registry
 
-If you want to benefit from the multi-server support built into `ipynbsrv`, you need to ensure that the (internally created) container images are available on all nodes, since the `ServerSelectionAlgorithm` in use might pick a random server to deploy a container.
+If you want to benefit from the multi-server support built into `coco`, you need to ensure that the (internally created) container images are available on all nodes, since the `ServerSelectionAlgorithm` in use might pick a random server to deploy a container.
 One way to accomplish that is using the official Docker Registry as a centralized image store. The documentation can be found here: [https://www.docker.com/docker-registry](https://www.docker.com/docker-registry).
 
 The next few chapters summarize the steps required.
@@ -92,19 +92,19 @@ $ service docker stop && service docker start
 Do make use of the registry, you finally have to tell the backend that one is in use. Usually you'll be using the `HttpRemote` backend as a proxy before the actual Docker backend. In this case, you'd have to initialize/run it with:
 
 ```bash
-$ ipynbsrv_hostapi ... --container-backend='ipynbsrv.backends.container_backends.Docker' --container-backend-args='{"registry": "192.168.0.1:5000"}' ...
+$ coco_hostapi ... --container-backend='coco.backends.container_backends.Docker' --container-backend-args='{"registry": "192.168.0.1:5000"}' ...
 ```
 
 ### Building the container images
 
 Docker containers are bootstrapped from images. The images themselves are created from `Dockerfile`s. You can read more about them here: [http://docs.docker.com/reference/builder/](http://docs.docker.com/reference/builder/).
 
-To make it easy for you, the Docker container backend ships with its own `Dockerfile` that is highly optimized for the use with `ipynbsrv`. It takes care of port mappings, mount points (volumes) and access control, which will limit access to the owner of the container.
+To make it easy for you, the Docker container backend ships with its own `Dockerfile` that is highly optimized for the use with `coco`. It takes care of port mappings, mount points (volumes) and access control, which will limit access to the owner of the container.
 
-To get started, get the files from [https://git.rackster.ch/ipynbsrv/dockerfiles/](https://git.rackster.ch/ipynbsrv/dockerfiles/) (or even better, clone the whole repository) and `cd` into i.e. the `base-ldap` directory. To build the image, issue:
+To get started, get the files from [https://github.com/coco-project/dockerfiles/](https://github.com/coco-project/dockerfiles/) (or even better, clone the whole repository) and `cd` into i.e. the `base-ldap` directory. To build the image, issue:
 
 ```bash
-$ docker build -t ipynbsrv/base-ldap:latest .
+$ docker build -t coco/base-ldap:latest .
 ```
 
 #### Pushing the image to the Registry
@@ -112,8 +112,8 @@ $ docker build -t ipynbsrv/base-ldap:latest .
 Building the image as described above is enough if you are deploying a single-server setup. If you are however deploying multiple servers, make sure the image is available on all nodes. This can be archived by tagging and pushing the newly build image to our private registry:
 
 ```
-$ docker tag ipynbsrv/base-ldap:latest 192.168.0.1:5000/ipynbsrv/base-ldap:latest
-$ docker push 192.168.0.1:5000/ipynbsrv/base-ldap:latest
+$ docker tag coco/base-ldap:latest 192.168.0.1:5000/coco/base-ldap:latest
+$ docker push 192.168.0.1:5000/coco/base-ldap:latest
 ```
 
 > `192.168.0.1` is the internal only IPv4 address of the node the registry is run on (usually the master node).
@@ -128,7 +128,7 @@ You can pick what ever name you want, a meaningful description and an owner.
 
 The important fields are the **Backend Properties**. Fill them as follow:
 
-- **Backend PK:** The primary key identifying this image. For `Docker` this is something like `192.168.0.1:5000/ipynbsrv/ipython2-notebook:latest`. Run `docker images` to get that identifier.
+- **Backend PK:** The primary key identifying this image. For `Docker` this is something like `192.168.0.1:5000/coco/ipython2-notebook:latest`. Run `docker images` to get that identifier.
 - **Command:** The command to run is specified by the image in use. Consult the image's `Dockerfile` to find it.
 - **Protected Port:** Again, this depends on the image. Check out the image's `Dockerfile`.
 - **Public Ports:** Same game again.
@@ -141,20 +141,20 @@ The `HttpRemote` is a proxy backend to other container backend implementations s
 
 ### Using the default HTTP API implementation
 
-The `HttpRemote` backend is pre-configured to work flawlessly with the `ipynbsrv.hostapi` package, which provides an HTTP interface to local container backends (e.g. `Docker`). In most cases, this is what you want.
+The `HttpRemote` backend is pre-configured to work flawlessly with the `coco.hostapi` package, which provides an HTTP interface to local container backends (e.g. `Docker`). In most cases, this is what you want.
 
 #### Deploying the HTTP API
 
 First you should install the Python package on the node you want to expose the local container backend:
 
 ```bash
-$ pip install ipynbsrv-hostapi
+$ pip install coco-hostapi
 ```
 
-Run it afterwards (see the `ipynbsrv.hostapi` documentation for all supported parameters):
+Run it afterwards (see the `coco.hostapi` documentation for all supported parameters):
 
 ```bash
-$ nohup ipynbsrv_hostapi --listen 192.168.0.2 &
+$ nohup coco_hostapi --listen 192.168.0.2 &
 ```
 
 > `192.168.0.2` is the internal only IPv4 address of the to be exposed node.    

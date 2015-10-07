@@ -1,6 +1,6 @@
-from ipynbsrv.common.utils import FileSystem
-from ipynbsrv.contract.backends import StorageBackend
-from ipynbsrv.contract.errors import DirectoryNotFoundError, StorageBackendError
+from coco.common.utils import FileSystem
+from coco.contract.backends import StorageBackend
+from coco.contract.errors import DirectoryNotFoundError, StorageBackendError
 
 
 class LocalFileSystem(StorageBackend):
