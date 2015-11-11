@@ -37,8 +37,8 @@ Finally the public key of each node must be trusted by the master node (or which
 Finally, the remote directory can be mounted:
 
 ```bash
-$ mkdir /srv/coco/data
-$ sshfs -C -o IdentityFile=/root/.ssh/coco_sshfs,reconnect,cache_timeout=3,nomap=ignore,allow_other,default_permissions root@192.168.0.1:/srv/coco/data/ /srv/coco/data/
+$ mkdir -p /srv/coco/data
+$ sshfs -C -o IdentityFile=/root/.ssh/coco_sshfs,reconnect,cache_timeout=3,nonempty,nomap=ignore,allow_other,default_permissions root@192.168.0.1:/srv/coco/data/ /srv/coco/data/
 ```
 
 > `192.168.0.1` is the internal only IPv4 address of the node the directory actually resists on (usually the master).    

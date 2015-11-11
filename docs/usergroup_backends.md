@@ -21,7 +21,7 @@ This can be done either through a desktop application or the command-line (like 
 The easiest way is to enter the internal LDAP container with:
 
 ```bash
-docker enter coco_ldap
+docke-bash coco_ldap
 ```
 
 > This only works if the core infrastructure is running on Docker (which is the default).
@@ -52,8 +52,9 @@ Setting up the container only takes one command:
 
 ```bash
 docker run -d \
+  --restart=always \
   --name coco_phpldapadmin \
-  -e HTTPS=false -e LDAP_HOSTS=coco_ldap \
+  -e PHPLDAPADMIN_HTTPS=false -e PHPLDAPADMIN_LDAP_HOSTS=coco_ldap \
   --link coco_ldap:coco_ldap \
   -p 0.0.0.0:82:80 \
   osixia/phpldapadmin:latest

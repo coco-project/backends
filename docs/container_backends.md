@@ -60,10 +60,9 @@ The next few chapters summarize the steps required.
 #### Running the Registry container
 
 ```bash
-$ docker run -d --name registry \
+$ docker run -d --name coco_registry \
   --restart=always \
   -p 192.168.0.1:5000:5000 \
-  -e REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED=false \
   registry:2
 ```
 
