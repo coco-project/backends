@@ -14,6 +14,17 @@ class LdapBackend(GroupBackend, UserBackend):
 
     https://www.packtpub.com/books/content/python-ldap-applications-part-1-installing-and-configuring-python-ldap-library-and-bin
     https://www.packtpub.com/books/content/python-ldap-applications-part-3-more-ldap-operations-and-ldap-url-library
+
+    The LDAP record values are mapped as follow:
+        - cn        -> GroupBackend.FIELD_PK
+        - cn        -> UserBackend.FIELD_PK
+        - gidNumber -> GroupBackend.FIELD_ID
+        - uidNumber -> UserBackend.FIELD_ID
+    All other values are ignored from external sources.
+    On the internal server, records are stored as seen in 'create_group' and 'create_user'.
+
+    A small refactoring should probablly allow to define the primary key identifier ('cn' right now)
+    as a constructor argument.
     """
 
     def __init__(self, server, base_dn, users_dn=None, groups_dn=None, readonly=False):
@@ -214,7 +225,7 @@ class LdapBackend(GroupBackend, UserBackend):
 
     def encrypt_password(self, password):
         """
-        Encrypts the password before storing it in LDAP.
+        Encrypt the password before storing it in LDAP.
 
         :param password: The password to encrypt.
         """
